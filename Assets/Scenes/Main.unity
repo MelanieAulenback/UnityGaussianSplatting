@@ -300,7 +300,6 @@ MonoBehaviour:
   - {fileID: -927777440634643073, guid: 231fea807aa9e4e3587be96bd3776d00, type: 3}
   - {fileID: -927777440634643073, guid: 7c07d7de9009e43ca93a14e07291e948, type: 3}
   - {fileID: -927777440634643073, guid: 80724bfe1b09c47a2888f3496bca8754, type: 3}
-  splatObj: {fileID: 46632176}
   animationLength: 12
 --- !u!1 &330585543
 GameObject:

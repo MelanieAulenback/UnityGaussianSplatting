@@ -39,6 +39,8 @@ public class SplatAnimator : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        MoveGaussians();
+        /*
         //accumulate the time
         timer += Time.deltaTime;
 
@@ -52,9 +54,10 @@ public class SplatAnimator : MonoBehaviour
             {
                 currFrame += 1;
             }
-            
+
             ChangeFrame(splats[currFrame]);
         }
+        */
     }
 
     //changes the splat parameters to the current frame splat data
@@ -68,5 +71,21 @@ public class SplatAnimator : MonoBehaviour
 
         //re-initiate the vfx graph to reload visuals
         vfx.Reinit();
+    }
+
+    public void MoveGaussians()
+    {
+        //move all gaussians along x
+        for (int i = 0; i < splats[currFrame].Positions.Length; i++)
+        {
+            splats[currFrame].Positions[i] += new Vector3(0.001f, 0f, 0f);
+        }
+
+        //send new positions to gpu
+        splats[currFrame].PositionsBuffer.SetData(splats[currFrame].Positions);
+        
+        //vfx graph only reads gpu
+        //takes new positions and reloads the graphics
+        //vfx.Reinit();
     }
 }
