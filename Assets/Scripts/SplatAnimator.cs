@@ -73,19 +73,25 @@ public class SplatAnimator : MonoBehaviour
         vfx.Reinit();
     }
 
-    public void MoveGaussians()
+    //moves gaussians over time
+    //position = base position + deform(gaussian function, time)
+    public void MoveGaussians(float time)
     {
-        //move all gaussians along x
+        //move all gaussians according to their specific functions and time
         for (int i = 0; i < splats[currFrame].Positions.Length; i++)
         {
-            splats[currFrame].Positions[i] += new Vector3(0.001f, 0f, 0f);
+            Vector3 newPos = splats[currFrame].Positions[i] + Deform(i, time);
         }
 
         //send new positions to gpu
-        splats[currFrame].PositionsBuffer.SetData(splats[currFrame].Positions);
+        splats[currFrame].PositionsBuffer.SetData(newPos);
         
-        //vfx graph only reads gpu
-        //takes new positions and reloads the graphics
-        //vfx.Reinit();
+    }
+
+    public void Deform(int gaussian, float time)
+    {
+        //the function for the current gaussian
+        //normally would be embed parameter from pth file
+
     }
 }
