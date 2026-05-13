@@ -153,7 +153,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6df34104ad6e3114689b249269d8e94c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  SplatData: {fileID: -927777440634643073, guid: 7c07d7de9009e43ca93a14e07291e948, type: 3}
+  SplatData: {fileID: -927777440634643073, guid: 231fea807aa9e4e3587be96bd3776d00, type: 3}
   MaxPoints: 1000
   Radius: 0.05
 --- !u!4 &46632180
@@ -240,7 +240,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 352948
+      - m_Value: 318036
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -267,7 +267,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6b23e4c8461b80e458b0acda332b8a17, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Data: {fileID: -927777440634643073, guid: 7c07d7de9009e43ca93a14e07291e948, type: 3}
+  Data: {fileID: -927777440634643073, guid: 231fea807aa9e4e3587be96bd3776d00, type: 3}
 --- !u!114 &46632184
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -300,7 +300,13 @@ MonoBehaviour:
   - {fileID: -927777440634643073, guid: 231fea807aa9e4e3587be96bd3776d00, type: 3}
   - {fileID: -927777440634643073, guid: 7c07d7de9009e43ca93a14e07291e948, type: 3}
   - {fileID: -927777440634643073, guid: 80724bfe1b09c47a2888f3496bca8754, type: 3}
-  animationLength: 12
+  animationLength: 30
+  BasePositions: []
+  BaseAxes: []
+  BaseColors: []
+  BaseTime: []
+  TimeScale: []
+  Velocity: []
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0

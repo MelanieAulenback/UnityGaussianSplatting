@@ -16,14 +16,21 @@ public class SplatAnimator : MonoBehaviour
 
     //base transforms
     public Vector3[] BasePositions;
-    public Quaternion[] BaseRotations;
-    public Vector3[] BaseScales;
     public Vector3[] BaseAxes;
+    public Color[] BaseColors;
+
+    private Vector3[] RestPositions;
+    private Vector3[] RestAxes;
+    private Color[] RestColors;
 
     //gaussian transforms
     Vector3 newPos;
     Quaternion newRot;
     Vector3 newScale;
+
+    public float[] BaseTime;
+    public float[] TimeScale;
+    public Vector3[] Velocity;
 
     //embeddings for each gaussian
     Vector4[] Embedding;
@@ -48,16 +55,23 @@ public class SplatAnimator : MonoBehaviour
         //assign the first splat
         ChangeFrame(splats[currFrame]);
 
+        SplatData src = splats[0];
+
+        RestPositions = (Vector3[])src.Positions.Clone();
+        RestAxes = (Vector3[])src.Axes.Clone();
+        RestColors = (Color[])src.Colors.Clone();
+
         //assign the embeddings array
         Embedding = new Vector4[splats[0].Count];
 
         //assign the base position of the gaussian
         BasePositions = (Vector3[])splats[0].Positions.Clone();
+        BaseColors = (Color[])splats[0].Colors.Clone();
+        BaseAxes = (Vector3[])splats[0].Axes.Clone();
 
-        //allocate scale and rotation arrays
-        BaseRotations = new Quaternion[splats[0].Count];
-        BaseScales = new Vector3[splats[0].Count];
-        BaseAxes = new Vector3[splats[0].Count * 3];
+        BaseTime = new float[splats[0].Count];
+        TimeScale = new float[splats[0].Count];
+        Velocity = new Vector3[splats[0].Count];
 
         //extract rotation + scale from axes
         for (int i = 0; i < splats[0].Count; i++)
@@ -71,27 +85,6 @@ public class SplatAnimator : MonoBehaviour
             BaseAxes[i * 3 + 1] = axisY;
             BaseAxes[i * 3 + 2] = axisZ;
 
-            //extract scale
-            float scaleX = axisX.magnitude;
-            float scaleY = axisY.magnitude;
-            float scaleZ = axisZ.magnitude;
-
-            BaseScales[i] = new Vector3(
-                scaleX,
-                scaleY,
-                scaleZ
-            );
-
-            //extract rotation
-            Vector3 right = axisX.normalized;
-            Vector3 up = axisY.normalized;
-            Vector3 forward = axisZ.normalized;
-
-            BaseRotations[i] = Quaternion.LookRotation(
-                forward,
-                up
-            );
-
             //set embedding
             Embedding[i] = new Vector4(
                 Random.value,
@@ -99,6 +92,14 @@ public class SplatAnimator : MonoBehaviour
                 Random.value,
                 Random.value
             );
+
+            BaseTime[i] = Random.Range(0f, animationLength);
+
+            TimeScale[i] = Random.Range(0.2f, 1.0f);
+
+            // direction + magnitude
+            Velocity[i] = Random.onUnitSphere * 0.05f;
+
         }
     }
 
@@ -150,6 +151,29 @@ public class SplatAnimator : MonoBehaviour
         //move all gaussians according to the shared functions and time
         for (int i = 0; i < data.Positions.Length; i++)
         {
+            float dt = time - BaseTime[i];
+
+            float temporalWeight = Mathf.Exp(-(dt * dt) / (2f * TimeScale[i] * TimeScale[i]));
+            
+            Vector3 offset = Velocity[i] * dt;
+            
+            data.Positions[i] = BasePositions[i] + offset;
+
+            float scale = Mathf.Lerp(0.5f, 1.0f, temporalWeight);
+
+            data.Axes[i * 3 + 0] =
+                BaseAxes[i * 3 + 0] * scale;
+
+            data.Axes[i * 3 + 1] =
+                BaseAxes[i * 3 + 1] * scale;
+
+            data.Axes[i * 3 + 2] =
+                BaseAxes[i * 3 + 2] * scale;
+
+            Color c = data.Colors[i];
+            c.a = temporalWeight;
+            data.Colors[i] = c;
+            /*
             Vector3 s = DeformScale(i, time);
 
             Vector3 axisX = BaseAxes[i * 3 + 0];
@@ -166,6 +190,7 @@ public class SplatAnimator : MonoBehaviour
             Color c = data.Colors[i];
             c.a = density;
             data.Colors[i] = c;
+            */
         }
 
         //send new positions to gpu
@@ -216,5 +241,31 @@ public class SplatAnimator : MonoBehaviour
 
         // squash into 0–1
         return Mathf.SmoothStep(0f, 1f, d * 0.5f + 0.5f);
+    }
+    public void ResetGaussians()
+    {
+        SplatData data = splats[0];
+
+        for (int i = 0; i < data.Count; i++)
+        {
+            data.Positions[i] = RestPositions[i];
+
+            data.Axes[i * 3 + 0] = RestAxes[i * 3 + 0];
+            data.Axes[i * 3 + 1] = RestAxes[i * 3 + 1];
+            data.Axes[i * 3 + 2] = RestAxes[i * 3 + 2];
+
+            data.Colors[i] = RestColors[i];
+        }
+
+        data.PositionsBuffer.SetData(data.Positions);
+        data.AxesBuffer.SetData(data.Axes);
+        data.ColorsBuffer.SetData(data.Colors);
+
+        vfx.Reinit();
+        ChangeFrame(splats[0]);
+    }
+    void OnDisable()
+    {
+        ResetGaussians();
     }
 }
