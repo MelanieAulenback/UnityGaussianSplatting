@@ -150,19 +150,6 @@ public class SplatAnimator : MonoBehaviour
         //move all gaussians according to the shared functions and time
         for (int i = 0; i < data.Positions.Length; i++)
         {
-            /*
-            newPos = data.BasePositions[i] + DeformPos(i, time);
-            newRot = data.BaseRotations[i] * DeformRot(i, time);
-            newScale = data.BaseScales[i] + DeformScale(i, time);
-
-            //update the transforms
-            data.Positions[i] = newPos;
-            
-            data.Axes[i * 3 + 0] = newRot * Vector3.right * newScale.x;
-            data.Axes[i * 3 + 1] = newRot * Vector3.up * newScale.y;
-            data.Axes[i * 3 + 2] = newRot * Vector3.forward * newScale.z;
-            */
-
             Vector3 s = DeformScale(i, time);
 
             Vector3 axisX = BaseAxes[i * 3 + 0];
@@ -187,22 +174,7 @@ public class SplatAnimator : MonoBehaviour
         data.ColorsBuffer.SetData(data.Colors);
         
     }
-    /*
-    //the function that moves the gaussians
-    public Vector3 DeformPos(int gaussian, float time)
-    {
-        //get the embed parameter from pth file for gaussian, is a set of random numbers representing how that gaussian behaves
 
-        //the movement function
-    }
-    //the function that rotates the gaussians
-    public Quaternion DeformRot(int gaussian, float time)
-    {
-        //get the embed parameter from pth file for gaussian, is a set of random numbers representing how that gaussian behaves
-
-        //the movement function
-    }
-    */
     //the function that scales the gaussians
     public Vector3 DeformScale(int i, float t)
     {
