@@ -3,6 +3,16 @@ using UnityEngine.VFX;
 
 public class SplatAnimator : MonoBehaviour
 {
+    public SplatData splat;
+    public Camera renderCamera;
+
+    public Texture2D colorImage;
+    public Texture2D depthMap;
+    private void Start()
+    {
+        splat.GenerateFromDepthMap(colorImage, depthMap, renderCamera, 1f, 5f, 2, 0.01f, true);
+    }
+    /*
     //array of splats
     public SplatData[] splats;
     //splat object
@@ -126,7 +136,7 @@ public class SplatAnimator : MonoBehaviour
 
             ChangeFrame(splats[currFrame]);
         }
-        */
+        
     }
 
     //changes the splat parameters to the current frame splat data
@@ -190,7 +200,7 @@ public class SplatAnimator : MonoBehaviour
             Color c = data.Colors[i];
             c.a = density;
             data.Colors[i] = c;
-            */
+            
         }
 
         //send new positions to gpu
@@ -268,4 +278,5 @@ public class SplatAnimator : MonoBehaviour
     {
         ResetGaussians();
     }
+    */
 }

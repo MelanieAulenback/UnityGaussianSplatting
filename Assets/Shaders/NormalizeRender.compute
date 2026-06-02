@@ -1,0 +1,20 @@
+#pragma kernel CSMain
+
+Texture2D<float4> _AccumColor;
+Texture2D<float> _AccumWeight;
+
+RWTexture2D<float4> _Rendered;
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    int2 p = id.xy;
+
+    float4 c = _AccumColor[p];
+    float w = _AccumWeight[p];
+
+    if (w > 1e-5)
+        c.rgb /= w;
+
+    _Rendered[p] = c;
+}

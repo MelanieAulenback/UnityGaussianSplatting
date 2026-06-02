@@ -8,7 +8,7 @@ public class SplatImporter : ScriptedImporter {
         var data = ScriptableObject.CreateInstance<SplatData>();
         data.name = Path.GetFileNameWithoutExtension(context.assetPath);
 
-        data.LoadFromFile(context.assetPath);
+        //data.LoadFromFile(context.assetPath);
 
         context.AddObjectToAsset("Data", data);
         context.SetMainObject(data);

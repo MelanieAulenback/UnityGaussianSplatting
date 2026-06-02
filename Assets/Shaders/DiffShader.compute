@@ -1,0 +1,38 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// INPUT textures
+Texture2D<float4> _Reference;
+Texture2D<float4> _Rendered;
+
+// OUTPUT texture
+RWTexture2D<float4> _Output;
+
+// GPU thread group size
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    // get current pixel coordinate
+    int2 pixel = id.xy;
+    
+    uint width;
+    uint height;
+
+    _Output.GetDimensions(width, height);
+
+    // bounds safety
+    if (pixel.x >= width || pixel.y >= height)
+        return;
+
+    // read pixel color from reference image
+    float4 refColor = _Reference[pixel];
+
+    // read pixel color from rendered image
+    float4 renderColor = _Rendered[pixel];
+
+    // compare colors
+    float3 diff = _Reference[pixel].rgb - _Rendered[pixel].rgb;
+
+    // write result to output texture
+    _Output[pixel] = float4(diff, 1);
+}
