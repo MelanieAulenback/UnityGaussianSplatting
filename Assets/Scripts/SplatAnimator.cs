@@ -19,6 +19,8 @@ public class SplatAnimator : MonoBehaviour
     private float timer;
     public bool IsReady;
 
+    private int lastFrame = -1;
+
     private void Update()
     {
         if (colorFrames == null || depthFrames == null)
@@ -67,6 +69,11 @@ public class SplatAnimator : MonoBehaviour
 
     public void NextFrame()
     {
+        if (currentFrame == lastFrame)
+            return;
+
+        lastFrame = currentFrame;
+
         currentFrame++;
 
         if (currentFrame >= colorFrames.Length)

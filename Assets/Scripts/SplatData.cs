@@ -266,7 +266,8 @@ public class SplatData : ScriptableObject
         Color[] depthPixels = depthMap.GetPixels();
         Color[] colorPixels = colorImage.GetPixels();
 
-        float step = 1f / Mathf.Max(width, height);
+        bool positionsChanged = false;
+        bool colorsChanged = false;
 
         for (int i = 0; i < Count; i++)
         {
@@ -282,36 +283,35 @@ public class SplatData : ScriptableObject
 
             float z = Mathf.Lerp(nearDepth, farDepth, depthRaw);
 
-            Vector3 worldPos = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x, uv.y, z));
+            Vector3 newPos = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x, uv.y, z));
+            Color newCol = colorPixels[idx];
 
-            Positions[i] = worldPos;
-            Colors[i] = colorPixels[idx];
+            if (!positionsChanged && Vector3.Distance(Positions[i], newPos) > 0.0001f)
+                positionsChanged = true;
 
-            Vector3 worldRight = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x + step, uv.y, z));
-            Vector3 worldUp = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x, uv.y + step, z));
+            if (!colorsChanged && Colors[i] != newCol)
+                colorsChanged = true;
 
-            Vector3 normal = Vector3.Normalize(Vector3.Cross(worldRight - worldPos, worldUp - worldPos));
-
-            Vector3 tangent = Vector3.Cross(Vector3.up, normal);
-            if (tangent.sqrMagnitude < 1e-6f)
-                tangent = Vector3.Cross(Vector3.right, normal);
-
-            tangent.Normalize();
-
-            Vector3 bitangent = Vector3.Cross(normal, tangent);
-            Quaternion rot = Quaternion.LookRotation(bitangent, normal);
-
-            Axes[i * 3 + 0] = rot * Vector3.right * gaussianSize;
-            Axes[i * 3 + 1] = rot * Vector3.up * gaussianSize;
-            Axes[i * 3 + 2] = rot * Vector3.forward * gaussianSize;
+            Positions[i] = newPos;
+            Colors[i] = newCol;
         }
 
-        _positionsA.SetData(Positions);
-        _colorsA.SetData(Colors);
-        _axesA.SetData(Axes);
+        if (positionsChanged)
+            UpdatePositionsOnly(Positions);
 
-        _positionsB.SetData(Positions);
-        _colorsB.SetData(Colors);
-        _axesB.SetData(Axes);
+        if (colorsChanged)
+            UpdateColorsOnly(Colors);
+    }
+
+    public void UpdatePositionsOnly(Vector3[] newPositions)
+    {
+        _positionsA.SetData(newPositions);
+        _positionsB.SetData(newPositions);
+    }
+
+    public void UpdateColorsOnly(Color[] newColors)
+    {
+        _colorsA.SetData(newColors);
+        _colorsB.SetData(newColors);
     }
 }
