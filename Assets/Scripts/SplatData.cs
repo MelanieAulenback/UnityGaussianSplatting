@@ -32,13 +32,14 @@ public class SplatData : ScriptableObject
     private GraphicsBuffer _weightsA;
     public GraphicsBuffer GaussianWeightBuffer => _weightsA;
 
-    private void OnEnable()
-    {
-        if (Positions != null && Positions.Length > 0)
-        {
-            InitializeBuffers();
-        }
-    }
+    private Vector2[] uvCoords;
+
+    public bool IsReady => _positionsA != null;
+
+    private Matrix4x4 vp;
+    private Matrix4x4 invVP;
+    private Matrix4x4 localToWorld;
+
 
     //swap input and output buffers
     public void SwapBuffers()
@@ -71,6 +72,9 @@ public class SplatData : ScriptableObject
         _axesB = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count * 3, sizeof(float) * 3);
 
         _weightsA = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(float));
+
+        float[] initWeights = new float[count];
+        _weightsA.SetData(initWeights);
 
         _positionsA.SetData(Positions);
         _positionsB.SetData(Positions);
@@ -167,92 +171,147 @@ public class SplatData : ScriptableObject
 
     // generates splats from depth map instead of splat file
     public void GenerateFromDepthMap(
-        Texture2D colorImage,
-        Texture2D depthMap,
-        Camera sourceCamera,
-        float nearDepth,
-        float farDepth,
-        int pixelStep,
-        float gaussianSize,
-        bool invertDepth)
+    Texture2D colorImage,
+    Texture2D depthMap,
+    Camera sourceCamera,
+    float nearDepth,
+    float farDepth,
+    int pixelStep,
+    float gaussianSize,
+    bool invertDepth)
     {
         Dispose();
 
         var positions = new List<Vector3>();
         var colors = new List<Color>();
         var axes = new List<Vector3>();
+        var uvList = new List<Vector2>();
 
         int width = depthMap.width;
         int height = depthMap.height;
 
-        //loop through each pixel
+        Color[] depthPixels = depthMap.GetPixels();
+        Color[] colorPixels = colorImage.GetPixels();
+
+        float stepUV = 1f / Mathf.Max(width, height);
+
         for (int y = 0; y < height; y += pixelStep)
         {
             for (int x = 0; x < width; x += pixelStep)
             {
-                //get distance from camera
-                float depthRaw = depthMap.GetPixel(x, y).r;
+                int i = y * width + x;
+
+                float depthRaw = depthPixels[i].r;
                 if (invertDepth) depthRaw = 1f - depthRaw;
                 if (depthRaw <= 0.001f) continue;
 
-                float u = (x + 0.5f + UnityEngine.Random.Range(-0.5f, 0.5f)) / width;
-                float v = (y + 0.5f + UnityEngine.Random.Range(-0.5f, 0.5f)) / height;
+                float u = (x + 0.5f) / width;
+                float v = (y + 0.5f) / height;
 
                 float z = Mathf.Lerp(nearDepth, farDepth, depthRaw);
 
-                Color color = colorImage.GetPixel(x, y);
+                Color color = colorPixels[i];
 
-                float jitter = UnityEngine.Random.Range(-0.01f, 0.01f);
-                Vector3 viewport = new Vector3(u, v, z + jitter);
+                Vector3 viewport = new Vector3(u, v, z);
                 Vector3 worldPos = sourceCamera.ViewportToWorldPoint(viewport);
 
-                float step = 1f / Mathf.Max(width, height);
+                Vector3 worldRight = sourceCamera.ViewportToWorldPoint(new Vector3(u + stepUV, v, z));
+                Vector3 worldUp = sourceCamera.ViewportToWorldPoint(new Vector3(u, v + stepUV, z));
 
-                Vector3 worldCenter = worldPos;
-                Vector3 worldRight = sourceCamera.ViewportToWorldPoint(
-                    new Vector3(u + step, v, z));
+                Vector3 normal = Vector3.Normalize(Vector3.Cross(worldRight - worldPos, worldUp - worldPos));
 
-                Vector3 worldUp = sourceCamera.ViewportToWorldPoint(
-                    new Vector3(u, v + step, z));
-
-                Vector3 normal = Vector3.Normalize(
-                    Vector3.Cross(worldRight - worldCenter, worldUp - worldCenter)
-                );
-
-                //find surface direction
                 Vector3 tangent = Vector3.Cross(Vector3.up, normal);
                 if (tangent.sqrMagnitude < 1e-6f)
                     tangent = Vector3.Cross(Vector3.right, normal);
 
                 tangent.Normalize();
+
                 Vector3 bitangent = Vector3.Cross(normal, tangent);
-
-                //direction to rotate
                 Quaternion rot = Quaternion.LookRotation(bitangent, normal);
-
-                Vector3 scale = new Vector3(
-                    gaussianSize,
-                    gaussianSize,
-                    gaussianSize
-                );
 
                 positions.Add(worldPos);
                 colors.Add(color);
 
-                axes.Add(rot * Vector3.right * scale.x);
-                axes.Add(rot * Vector3.up * scale.y);
-                axes.Add(rot * Vector3.forward * scale.z);
-                
+                axes.Add(rot * Vector3.right * gaussianSize);
+                axes.Add(rot * Vector3.up * gaussianSize);
+                axes.Add(rot * Vector3.forward * gaussianSize);
+
+                uvList.Add(new Vector2(u, v));
             }
         }
 
         Positions = positions.ToArray();
         Colors = colors.ToArray();
         Axes = axes.ToArray();
+        uvCoords = uvList.ToArray();
 
-        Debug.Log($"Generated {Positions.Length} splats from depth map.");
-
-        //reset buffers to new data
         InitializeBuffers();
+    }
+
+    public void UpdateFromDepthMap(
+    Texture2D colorImage,
+    Texture2D depthMap,
+    Camera sourceCamera,
+    float nearDepth,
+    float farDepth,
+    float gaussianSize,
+    bool invertDepth)
+    {
+        if (uvCoords == null || uvCoords.Length != Count)
+            return;
+
+        int width = depthMap.width;
+        int height = depthMap.height;
+
+        Color[] depthPixels = depthMap.GetPixels();
+        Color[] colorPixels = colorImage.GetPixels();
+
+        float step = 1f / Mathf.Max(width, height);
+
+        for (int i = 0; i < Count; i++)
+        {
+            Vector2 uv = uvCoords[i];
+
+            int x = Mathf.Clamp((int)(uv.x * width), 0, width - 1);
+            int y = Mathf.Clamp((int)(uv.y * height), 0, height - 1);
+
+            int idx = y * width + x;
+
+            float depthRaw = depthPixels[idx].r;
+            if (invertDepth) depthRaw = 1f - depthRaw;
+
+            float z = Mathf.Lerp(nearDepth, farDepth, depthRaw);
+
+            Vector3 worldPos = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x, uv.y, z));
+
+            Positions[i] = worldPos;
+            Colors[i] = colorPixels[idx];
+
+            Vector3 worldRight = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x + step, uv.y, z));
+            Vector3 worldUp = sourceCamera.ViewportToWorldPoint(new Vector3(uv.x, uv.y + step, z));
+
+            Vector3 normal = Vector3.Normalize(Vector3.Cross(worldRight - worldPos, worldUp - worldPos));
+
+            Vector3 tangent = Vector3.Cross(Vector3.up, normal);
+            if (tangent.sqrMagnitude < 1e-6f)
+                tangent = Vector3.Cross(Vector3.right, normal);
+
+            tangent.Normalize();
+
+            Vector3 bitangent = Vector3.Cross(normal, tangent);
+            Quaternion rot = Quaternion.LookRotation(bitangent, normal);
+
+            Axes[i * 3 + 0] = rot * Vector3.right * gaussianSize;
+            Axes[i * 3 + 1] = rot * Vector3.up * gaussianSize;
+            Axes[i * 3 + 2] = rot * Vector3.forward * gaussianSize;
+        }
+
+        _positionsA.SetData(Positions);
+        _colorsA.SetData(Colors);
+        _axesA.SetData(Axes);
+
+        _positionsB.SetData(Positions);
+        _colorsB.SetData(Colors);
+        _axesB.SetData(Axes);
     }
 }

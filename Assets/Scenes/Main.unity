@@ -301,6 +301,9 @@ MonoBehaviour:
   renderCamera: {fileID: 0}
   colorImage: {fileID: 0}
   depthMap: {fileID: 0}
+  colorFrames: []
+  depthFrames: []
+  fps: 30
 --- !u!114 &46632186
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -313,6 +316,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a0d4f963f9d5ce4fae939e83c458b1c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  menu: {fileID: 0}
+  animator: {fileID: 0}
 --- !u!1 &110805661
 GameObject:
   m_ObjectHideFlags: 0
@@ -530,7 +535,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 0
+      - m_Value: 524268
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -624,6 +629,9 @@ MonoBehaviour:
   renderCamera: {fileID: 1637734291}
   colorImage: {fileID: 2800000, guid: a5704b3b795906748b1d13312c566ec9, type: 3}
   depthMap: {fileID: 2800000, guid: 32efbc2d0de760c478a0bd96f42b80cd, type: 3}
+  colorFrames: []
+  depthFrames: []
+  fps: 30
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -915,6 +923,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a0d4f963f9d5ce4fae939e83c458b1c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  menu: {fileID: 581085177}
+  animator: {fileID: 288690023}
 --- !u!4 &524605041
 Transform:
   m_ObjectHideFlags: 0
@@ -1218,7 +1228,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &581085175
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2143,7 +2153,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 524605040}
         m_TargetAssemblyTypeName: FileSelector, Assembly-CSharp
-        m_MethodName: RunBatch
+        m_MethodName: StartAnimation
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

@@ -1,13 +1,15 @@
 using SFB;
 using UnityEngine;
 using System.IO;
+using System.Linq;
 
 public class FileSelector : MonoBehaviour
 {
-    /*
-    public SplatBatchProcessor processor;
     public Canvas menu;
     public SplatAnimator animator;
+
+    private string colorFolder;
+    private string depthFolder;
 
     public void SelectColorFolder()
     {
@@ -18,7 +20,7 @@ public class FileSelector : MonoBehaviour
         );
 
         if (paths.Length > 0)
-            processor.colorFolder = paths[0];
+            colorFolder = paths[0];
     }
 
     public void SelectDepthFolder()
@@ -30,14 +32,40 @@ public class FileSelector : MonoBehaviour
         );
 
         if (paths.Length > 0)
-            processor.depthFolder = paths[0];
+            depthFolder = paths[0];
     }
 
-    public void RunBatch()
+    public void StartAnimation()
     {
+        animator.colorFrames = LoadFolder(colorFolder);
+        animator.depthFrames = LoadFolder(depthFolder);
+
+        animator.StartPlayback();
+
         if (menu != null)
             menu.enabled = false;
-        processor.StartBatch();
     }
-    */
+
+    Texture2D[] LoadFolder(string folder)
+    {
+        string[] files = Directory.GetFiles(folder, "*.png")
+                                  .OrderBy(f => f)
+                                  .ToArray();
+
+        Texture2D[] textures = new Texture2D[files.Length];
+
+        for (int i = 0; i < files.Length; i++)
+        {
+            byte[] bytes = File.ReadAllBytes(files[i]);
+
+            Texture2D tex = new Texture2D(2, 2);
+            tex.LoadImage(bytes);
+
+            textures[i] = tex;
+        }
+
+        Debug.Log($"Loaded {textures.Length} images from {folder}");
+
+        return textures;
+    }
 }

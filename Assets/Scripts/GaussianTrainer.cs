@@ -89,12 +89,13 @@ public class GaussianTrainer : MonoBehaviour
         kernelClear = clearShader.FindKernel("CSMain");
 
         gaussianUpdateShader.SetFloat("_ColorSpeed", 0.05f);
-
-        splatData.InitializeBuffers();
     }
 
     void Update()
     {
+        if (!splatData.IsReady)
+            return;
+
         if (referenceImage == null) return;
 
         //convert world space to screen space
@@ -185,6 +186,14 @@ public class GaussianTrainer : MonoBehaviour
     // -------------------------------------------------
     void RunContributionPass()
     {
+        if (splatData == null ||
+    splatData.PositionsBuffer == null ||
+    splatData.ColorsBuffer == null ||
+    splatData.GaussianWeightBuffer == null)
+        {
+            return; // don’t run GPU pass yet
+        }
+
         //clear buffers
         clearShader.SetTexture(kernelClear, "_AccumColor", accumColor);
         clearShader.SetTexture(kernelClear, "_AccumWeight", accumWeight);

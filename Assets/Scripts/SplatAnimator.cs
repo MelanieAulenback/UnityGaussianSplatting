@@ -8,9 +8,100 @@ public class SplatAnimator : MonoBehaviour
 
     public Texture2D colorImage;
     public Texture2D depthMap;
-    private void Start()
+
+    [HideInInspector] public Texture2D[] colorFrames;
+    [HideInInspector] public Texture2D[] depthFrames;
+
+    private int currentFrame = 0;
+
+    public float fps = 30f;
+
+    private float timer;
+    public bool IsReady;
+
+    private void Update()
     {
-        splat.GenerateFromDepthMap(colorImage, depthMap, renderCamera, 1f, 5f, 2, 0.01f, true);
+        if (colorFrames == null || depthFrames == null)
+            return;
+        if (colorFrames.Length == 0 || depthFrames.Length == 0)
+        {
+            return;
+        }
+        else
+        {
+            IsReady = true;
+            timer += Time.deltaTime;
+
+            if (timer >= 1f / fps)
+            {
+                timer = 0f;
+                NextFrame();
+            }
+        }
+    }
+    public void StartPlayback()
+    {
+        if (colorFrames == null || depthFrames == null)
+        {
+            Debug.LogError("Frames not loaded.");
+            return;
+        }
+
+        if (colorFrames.Length == 0 || depthFrames.Length == 0)
+        {
+            Debug.LogError("No images found.");
+            return;
+        }
+
+        splat.GenerateFromDepthMap(
+            colorFrames[0],
+            depthFrames[0],
+            renderCamera,
+            1f,
+            5f,
+            16,
+            0.01f,
+            true
+        );
+    }
+
+    public void NextFrame()
+    {
+        currentFrame++;
+
+        if (currentFrame >= colorFrames.Length)
+            currentFrame = 0;
+        Debug.Log($"Frame {currentFrame}");
+        Debug.Log($"Color frames: {colorFrames.Length}");
+        Debug.Log($"Depth frames: {depthFrames.Length}");
+
+        if (currentFrame >= depthFrames.Length)
+        {
+            Debug.LogError("Depth frame count does not match color frame count.");
+            return;
+        }
+
+        if (colorFrames[currentFrame] == null)
+        {
+            Debug.LogError($"Color frame {currentFrame} is null");
+            return;
+        }
+
+        if (depthFrames[currentFrame] == null)
+        {
+            Debug.LogError($"Depth frame {currentFrame} is null");
+            return;
+        }
+
+        splat.UpdateFromDepthMap(
+            colorFrames[currentFrame],
+            depthFrames[currentFrame],
+            renderCamera,
+            1f,
+            5f,
+            0.01f,
+            true
+        );
     }
     /*
     //array of splats
