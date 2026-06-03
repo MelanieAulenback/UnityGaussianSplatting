@@ -257,6 +257,7 @@ public class SplatData : ScriptableObject
     float gaussianSize,
     bool invertDepth)
     {
+        Debug.Log("UpdateFromDepthMap called");
         if (uvCoords == null || uvCoords.Length != Count)
             return;
 
