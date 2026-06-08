@@ -1457,7 +1457,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 4080
+      - m_Value: 258659
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -1524,7 +1524,7 @@ Transform:
   m_GameObject: {fileID: 746755236}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -7.3040514, y: 1.5927544, z: -1.7246579}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2127,7 +2127,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 4080
+      - m_Value: 258660
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2194,7 +2194,7 @@ Transform:
   m_GameObject: {fileID: 916050660}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.174051, y: 1.5927544, z: -3.4546578}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2651,7 +2651,7 @@ GameObject:
   - component: {fileID: 1219461227}
   - component: {fileID: 1219461226}
   m_Layer: 0
-  m_Name: 45FrontRight
+  m_Name: 45FrontRightCam
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2768,13 +2768,62 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1219461225}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0.9209288, z: -0, w: 0.38973102}
-  m_LocalPosition: {x: 9.43, y: 0.5, z: -4.31}
+  m_LocalRotation: {x: -0.04331677, y: 0.37374592, z: -0.3220527, w: 0.86874604}
+  m_LocalPosition: {x: -0.23003313, y: 0.6966008, z: -4.818333}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: -134.124, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 163.72, z: 0}
+--- !u!1 &1285201267
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1285201269}
+  - component: {fileID: 1285201268}
+  m_Layer: 0
+  m_Name: COLMAP Loader
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1285201268
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1285201267}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 415441f5e95606c41bd99b6e2068e356, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  imagesTxtPath: C:\Users\Melanie\Downloads\Image Sequences\Reading\Colmap\project\images.txt
+  frontImageName: Front/Reading Front 223.png
+  angle45ImageName: 45/Reading 45 223.png
+  frontCamera: {fileID: 1637734291}
+  angle45Camera: {fileID: 1219461228}
+--- !u!4 &1285201269
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1285201267}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.8431258, y: 1.1113542, z: -5.206309}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1286519983
 GameObject:
   m_ObjectHideFlags: 0
@@ -3453,8 +3502,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1637734288}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -0.039, y: 0.5, z: 0.13}
+  m_LocalRotation: {x: 0.008873675, y: -0.022115618, z: 0.0070848535, w: 0.99969095}
+  m_LocalPosition: {x: 0.7881688, y: -0.23037921, z: 4.9914703}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4443,3 +4492,4 @@ SceneRoots:
   - {fileID: 916050668}
   - {fileID: 746755244}
   - {fileID: 524605041}
+  - {fileID: 1285201269}

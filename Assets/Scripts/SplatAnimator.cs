@@ -86,7 +86,7 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[i],
                 1f,
                 5f,
-                16,
+                2,
                 0.01f,
                 true
             );
