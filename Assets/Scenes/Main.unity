@@ -297,10 +297,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  splats: []
+  splat: {fileID: 0}
   renderCameras: []
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
   IsReady: 0
   numCameras: 2
@@ -618,14 +616,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  splats:
-  - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
-  - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
+  splat: {fileID: 0}
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 2800000, guid: a5704b3b795906748b1d13312c566ec9, type: 3}
-  depthMap: {fileID: 2800000, guid: 32efbc2d0de760c478a0bd96f42b80cd, type: 3}
   fps: 30
   IsReady: 0
   numCameras: 2
@@ -1199,17 +1193,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fc5d62b826eeeaa4583082e91e4111fe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  renderCamera: {fileID: 1637734291}
-  diffShader: {fileID: 7200000, guid: 0d2a527bfaa0bdd468406594d4ecea80, type: 3}
-  gaussianUpdateShader: {fileID: 7200000, guid: 3fcb5caedc5eabd458fcde38e0b78d62, type: 3}
-  contributionShader: {fileID: 7200000, guid: 5582f116fc94d8140817a7aae17a274d, type: 3}
-  normalizeShader: {fileID: 7200000, guid: 62b6696fd315f9c40a6b5e8a8b967407, type: 3}
-  clearShader: {fileID: 7200000, guid: 5b23e528062bf4545abb552c61a357f3, type: 3}
-  referenceImage: {fileID: 2800000, guid: a5704b3b795906748b1d13312c566ec9, type: 3}
-  debugDiffImage: {fileID: 790079259}
-  debugRefImage: {fileID: 2107784506}
-  debugCamImage: {fileID: 1661906858}
-  splatData: {fileID: 11400000, guid: 03728df05b8152b4684d2b3d43b321bd, type: 2}
 --- !u!4 &571804211
 Transform:
   m_ObjectHideFlags: 0
@@ -1350,7 +1333,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &746755237
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1363,14 +1346,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  splats:
-  - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
-  - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
+  splat: {fileID: 0}
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 2800000, guid: a5704b3b795906748b1d13312c566ec9, type: 3}
-  depthMap: {fileID: 2800000, guid: 32efbc2d0de760c478a0bd96f42b80cd, type: 3}
   fps: 30
   IsReady: 0
   numCameras: 2
@@ -1413,8 +1392,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_ExecuteInEditor: 1
-  m_Bindings:
-  - {fileID: 746755239}
+  m_Bindings: []
   m_VisualEffect: {fileID: 746755242}
 --- !u!114 &746755241
 MonoBehaviour:
@@ -1480,7 +1458,7 @@ VFXRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 746755236}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
@@ -2033,14 +2011,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  splats:
-  - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
-  - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
+  splat: {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 2800000, guid: a5704b3b795906748b1d13312c566ec9, type: 3}
-  depthMap: {fileID: 2800000, guid: 32efbc2d0de760c478a0bd96f42b80cd, type: 3}
   fps: 30
   IsReady: 0
   numCameras: 2
@@ -2127,7 +2101,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 258660
+      - m_Value: 258659
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2768,13 +2742,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1219461225}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.04331677, y: 0.37374592, z: -0.3220527, w: 0.86874604}
-  m_LocalPosition: {x: -0.23003313, y: 0.6966008, z: -4.818333}
+  m_LocalRotation: {x: -0, y: -0.13531248, z: -0, w: 0.990803}
+  m_LocalPosition: {x: 9.85, y: 0.6966008, z: 6.1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 163.72, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: -15.553, z: 0}
 --- !u!1 &1285201267
 GameObject:
   m_ObjectHideFlags: 0
@@ -3502,13 +3476,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1637734288}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.008873675, y: -0.022115618, z: 0.0070848535, w: 0.99969095}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.7881688, y: -0.23037921, z: 4.9914703}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1661906857
 GameObject:
   m_ObjectHideFlags: 0

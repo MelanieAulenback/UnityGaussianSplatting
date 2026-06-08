@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 public class GaussianTrainer : MonoBehaviour
 {
+    /*
     public Camera renderCamera;
 
     private RenderTexture renderTexture;
@@ -245,5 +246,5 @@ public class GaussianTrainer : MonoBehaviour
             h / 8,
             1
         );
-    }
+    }*/
 }
