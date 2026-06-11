@@ -105,6 +105,77 @@ public class SplatData : ScriptableObject
     // =========================
     // STABLE GENERATION (RUN ONCE)
     // =========================
+    public void GenerateFlatImage(
+    Texture2D colorImage,
+    Camera cam,
+    float distance,
+    float pixelStep,
+    float pointSize)
+    {
+        Dispose();
+
+        var positions = new List<Vector3>();
+        var colors = new List<Color>();
+        var axes = new List<Vector3>();
+
+        var uvList = new List<Vector2>();
+
+        int width = colorImage.width;
+        int height = colorImage.height;
+
+        for (int y = 0; y < height; y += (int)pixelStep)
+        {
+            for (int x = 0; x < width; x += (int)pixelStep)
+            {
+                float u = (x + 0.5f) / width;
+                float v = (y + 0.5f) / height;
+
+                Color col = colorImage.GetPixelBilinear(u, v);
+
+                Ray ray = cam.ViewportPointToRay(new Vector3(u, v, 0));
+
+                Vector3 pos =
+                    cam.transform.position +
+                    ray.direction.normalized * distance;
+
+                positions.Add(pos);
+                colors.Add(col);
+
+                axes.Add(Vector3.right * pointSize);
+                axes.Add(Vector3.up * pointSize);
+                axes.Add(Vector3.forward * pointSize);
+
+                uvList.Add(new Vector2(u, v));
+            }
+        }
+
+        Positions = positions.ToArray();
+        Colors = colors.ToArray();
+        Axes = axes.ToArray();
+
+        uvCoords = uvList.ToArray();
+
+        InitializeBuffers();
+    }
+
+    public void UpdateFlatImage(Texture2D colorImage)
+    {
+        if (uvCoords == null)
+            return;
+
+        for (int i = 0; i < uvCoords.Length; i++)
+        {
+            Vector2 uv = uvCoords[i];
+
+            Colors[i] = colorImage.GetPixelBilinear(
+                uv.x,
+                uv.y
+            );
+        }
+
+        UpdateColorsOnly(Colors);
+    }
+    /*
     public void GenerateFromDepthMap(
         Texture2D colorImage,
         Texture2D depthMap,
@@ -211,7 +282,7 @@ public class SplatData : ScriptableObject
         UpdatePositionsOnly(Positions);
         UpdateColorsOnly(Colors);
     }
-
+    */
     // =========================
     // GPU UPDATES
     // =========================

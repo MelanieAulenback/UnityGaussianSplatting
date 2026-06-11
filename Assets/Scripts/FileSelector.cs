@@ -53,22 +53,29 @@ public class FileSelector : MonoBehaviour
         Debug.Log($"Animator in FileSelector: {animator.name}");
         int camCount = animator.numCameras;
 
+        if (colourFolders.Count < camCount)
+        {
+            Debug.LogError($"Not enough folders selected. Needed {camCount}, got {colourFolders.Count} color");
+            return;
+        }
+
+        /*
         if (colourFolders.Count < camCount || depthFolders.Count < camCount)
         {
             Debug.LogError($"Not enough folders selected. Needed {camCount}, got {colourFolders.Count} color and {depthFolders.Count} depth.");
             return;
         }
-
+        */
         animator.colorFrames = new Texture2D[animator.numCameras][];
         Debug.Log("Allocated colorFrames");
 
-        animator.depthFrames = new Texture2D[animator.numCameras][];
-        Debug.Log("Allocated depthFrames");
+        //animator.depthFrames = new Texture2D[animator.numCameras][];
+        //Debug.Log("Allocated depthFrames");
 
         for (int i = 0; i < camCount; i++)
         {
             animator.colorFrames[i] = LoadFolder(colourFolders[i]);
-            animator.depthFrames[i] = LoadFolder(depthFolders[i]);
+            //animator.depthFrames[i] = LoadFolder(depthFolders[i]);
         }
 
         animator.StartPlayback();

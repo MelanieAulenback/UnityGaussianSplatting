@@ -25,19 +25,13 @@ public class SplatAnimator : MonoBehaviour
 
     public Slider loadingBar;
 
-    private void Start()
-    {
-        Debug.Log($"SplatAnimator START on: {gameObject.name}");
-    }
-
     private void Update()
     {
-        Debug.Log($"SplatAnimator UPDATE on: {gameObject.name}");
-        if (colorFrames == null || depthFrames == null)
+        if (colorFrames == null)
         {
             return;
         }
-        if (colorFrames[0].Length == 0 || depthFrames[0].Length == 0)
+        if (colorFrames[0].Length == 0)
         {
             Debug.Log("No frames loaded");
             return;
@@ -46,8 +40,6 @@ public class SplatAnimator : MonoBehaviour
         {
             IsReady = true;
             timer += Time.deltaTime;
-
-            Debug.Log($"Timer: {timer}");
 
             if (timer >= 1f / fps)
             {
@@ -61,40 +53,39 @@ public class SplatAnimator : MonoBehaviour
     }
     public void StartPlayback()
     {
-        Debug.Log($"StartPlayback called on: {gameObject.name}");
 
-        Debug.Log($"colorFrames null? {colorFrames == null}");
-        Debug.Log($"depthFrames null? {depthFrames == null}");
-
-        if (colorFrames == null || depthFrames == null)
+        if (colorFrames == null)
         {
             Debug.LogError("Frames not loaded.");
             return;
         }
-
+        /*
+         * if (colorFrames == null || depthFrames == null)
+        {
+            Debug.LogError("Frames not loaded.");
+            return;
+        }
         if (colorFrames[0].Length == 0 || depthFrames[0].Length == 0)
         {
             Debug.LogError("No images found.");
             return;
         }
-
+        */
         for (int i = 0; i < numCameras; i++)
         {
-            splats[i].GenerateFromDepthMap(
+            splats[i].GenerateFlatImage(
                 colorFrames[i][0],
-                depthFrames[i][0],
                 renderCameras[i],
-                0.5f,
-                50f,
-                1,
-                0.01f,
-                false
+                3f,
+                2,
+                0.01f
             );
         }
     }
 
     public void NextFrame()
     {
+        Debug.Log($"Frame {currentFrame}");
         int frameCount = colorFrames[0].Length;
 
         currentFrame++;
@@ -104,6 +95,10 @@ public class SplatAnimator : MonoBehaviour
 
         for (int i = 0; i < numCameras; i++)
         {
+            splats[i].UpdateFlatImage(
+                colorFrames[i][currentFrame]
+            );
+            /*
             if (colorFrames[i] == null || depthFrames[i] == null)
             {
                 Debug.LogError($"Camera {i} frames missing");
@@ -115,7 +110,7 @@ public class SplatAnimator : MonoBehaviour
                 Debug.LogError($"Frame overflow on camera {i}");
                 continue;
             }
-
+            
             splats[i].UpdateFromDepthMap(
                 colorFrames[i][currentFrame],
                 depthFrames[i][currentFrame],
@@ -123,6 +118,7 @@ public class SplatAnimator : MonoBehaviour
                 50f,
                 false
             );
+            */
         }
     }
 }

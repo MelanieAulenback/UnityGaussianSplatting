@@ -1431,7 +1431,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 225370
+      - m_Value: 258660
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2101,7 +2101,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 225446
+      - m_Value: 258660
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2759,7 +2759,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1285201269}
   - component: {fileID: 1285201270}
-  - component: {fileID: 1285201271}
   m_Layer: 0
   m_Name: Camera Poses Loader
   m_TagString: Untagged
@@ -2799,18 +2798,8 @@ MonoBehaviour:
   - {fileID: 1219461228}
   extrinsicsPath: C:\Users\Melanie\Downloads\Image Sequences\Reading\DA3\extrinsics.npy
   intrinsicsPath: C:\Users\Melanie\Downloads\Image Sequences\Reading\DA3\intrinsics.npy
---- !u!114 &1285201271
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1285201267}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ce7a784827215b841b95e69d05260468, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  imageWidth: 504
+  imageHeight: 448
 --- !u!1 &1286519983
 GameObject:
   m_ObjectHideFlags: 0
