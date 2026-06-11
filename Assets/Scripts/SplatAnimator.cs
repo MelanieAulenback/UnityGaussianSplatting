@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.VFX;
 using UnityEngine.UI;
 
 public class SplatAnimator : MonoBehaviour
@@ -6,75 +7,120 @@ public class SplatAnimator : MonoBehaviour
     public SplatData[] splats;
     public Camera[] renderCameras;
 
-    public Texture2D[][] colorFrames;
+    public Texture2D colorImage;
+    public Texture2D depthMap;
 
-    // camera → single depth map (CURRENT DESIGN)
-    public float[][,] depthFramesNpy;
+    [HideInInspector] public Texture2D[][] colorFrames;
+    [HideInInspector] public Texture2D[][] depthFrames;
 
-    private int currentFrame;
+    private int currentFrame = 0;
+
     public float fps = 30f;
-    private float timer;
 
+    private float timer;
+    public bool IsReady;
+
+    private int lastFrame = -1;
     public int numCameras = 2;
+
     public Slider loadingBar;
-    public DepthInspector depthInspector;
+
+    private void Start()
+    {
+        Debug.Log($"SplatAnimator START on: {gameObject.name}");
+    }
 
     private void Update()
     {
-        if (colorFrames == null || depthFramesNpy == null)
-            return;
-
-        timer += Time.deltaTime;
-
-        if (timer >= 1f / fps)
+        Debug.Log($"SplatAnimator UPDATE on: {gameObject.name}");
+        if (colorFrames == null || depthFrames == null)
         {
-            timer = 0f;
-            NextFrame();
+            return;
         }
+        if (colorFrames[0].Length == 0 || depthFrames[0].Length == 0)
+        {
+            Debug.Log("No frames loaded");
+            return;
+        }
+        else
+        {
+            IsReady = true;
+            timer += Time.deltaTime;
 
-        loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+            Debug.Log($"Timer: {timer}");
+
+            if (timer >= 1f / fps)
+            {
+                timer = 0f;
+                NextFrame();
+            }
+
+            //update progress bar
+            loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+        }
     }
-
     public void StartPlayback()
     {
-        depthInspector.depthFramesNpy = depthFramesNpy;
+        Debug.Log($"StartPlayback called on: {gameObject.name}");
+
+        Debug.Log($"colorFrames null? {colorFrames == null}");
+        Debug.Log($"depthFrames null? {depthFrames == null}");
+
+        if (colorFrames == null || depthFrames == null)
+        {
+            Debug.LogError("Frames not loaded.");
+            return;
+        }
+
+        if (colorFrames[0].Length == 0 || depthFrames[0].Length == 0)
+        {
+            Debug.LogError("No images found.");
+            return;
+        }
 
         for (int i = 0; i < numCameras; i++)
         {
-            float[,] depth = depthFramesNpy[i];
-
-            splats[i].SetDepthFrame(depth);
-
             splats[i].GenerateFromDepthMap(
                 colorFrames[i][0],
+                depthFrames[i][0],
                 renderCameras[i],
-                1f,
-                5f,
+                0.5f,
+                50f,
                 1,
                 0.01f,
                 false
             );
         }
-
-        depthInspector.Inspect(0, 0);
     }
 
     public void NextFrame()
     {
-        currentFrame = (currentFrame + 1) % colorFrames[0].Length;
+        int frameCount = colorFrames[0].Length;
+
+        currentFrame++;
+
+        if (currentFrame >= frameCount)
+            currentFrame = 0;
 
         for (int i = 0; i < numCameras; i++)
         {
-            float[,] depth = depthFramesNpy[i];
+            if (colorFrames[i] == null || depthFrames[i] == null)
+            {
+                Debug.LogError($"Camera {i} frames missing");
+                continue;
+            }
 
-            splats[i].SetDepthFrame(depth);
+            if (currentFrame >= colorFrames[i].Length)
+            {
+                Debug.LogError($"Frame overflow on camera {i}");
+                continue;
+            }
 
             splats[i].UpdateFromDepthMap(
                 colorFrames[i][currentFrame],
-                renderCameras[i],
-                1f,
-                5f,
-                0.01f,
+                depthFrames[i][currentFrame],
+                0.5f,
+                50f,
                 false
             );
         }

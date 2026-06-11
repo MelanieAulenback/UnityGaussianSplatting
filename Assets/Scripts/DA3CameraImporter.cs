@@ -41,18 +41,12 @@ public class DA3CameraImporter : MonoBehaviour
         Matrix4x4 c2w = w2c.inverse;
 
         Vector3 pos = c2w.GetColumn(3);
-        pos.x = -pos.x;
-
         Vector3 forward = c2w.GetColumn(2);
-        forward.x = -forward.x;
-
         Vector3 up = c2w.GetColumn(1);
-        up.x = -up.x;
 
         cam.transform.position = pos;
         cam.transform.rotation = Quaternion.LookRotation(forward, up);
 
         Debug.Log($"Camera {i} applied");
-        Debug.Log(c2w);
     }
 }
