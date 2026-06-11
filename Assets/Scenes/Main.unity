@@ -299,12 +299,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   splats: []
   renderCameras: []
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 0}
+  depthInspector: {fileID: 0}
 --- !u!114 &46632186
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -442,7 +440,6 @@ GameObject:
   - component: {fileID: 288690019}
   - component: {fileID: 288690018}
   - component: {fileID: 288690017}
-  - component: {fileID: 288690022}
   - component: {fileID: 288690023}
   m_Layer: 0
   m_Name: GenerativeSplat
@@ -536,7 +533,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 518399
+      - m_Value: 292621
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -594,7 +591,7 @@ VFXRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
---- !u!114 &288690022
+--- !u!114 &288690023
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -603,31 +600,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 288690014}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1afb782debb10a043bf968ed483cf633, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!114 &288690023
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 288690014}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  splats: []
+  splats:
+  - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
+  - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
+  depthInspector: {fileID: 0}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1354,12 +1339,10 @@ MonoBehaviour:
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
+  depthInspector: {fileID: 0}
 --- !u!114 &746755238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1442,7 +1425,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 0
+      - m_Value: 141120
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2024,12 +2007,10 @@ MonoBehaviour:
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
+  depthInspector: {fileID: 1285201271}
 --- !u!114 &916050662
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2112,7 +2093,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 205352
+      - m_Value: 141120
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2727,7 +2708,7 @@ Camera:
     height: 1
   near clip plane: 0.01
   far clip plane: 1000
-  field of view: 60
+  field of view: 32
   orthographic: 0
   orthographic size: 5
   m_Depth: 0
@@ -2770,8 +2751,9 @@ GameObject:
   m_Component:
   - component: {fileID: 1285201269}
   - component: {fileID: 1285201270}
+  - component: {fileID: 1285201271}
   m_Layer: 0
-  m_Name: COLMAP Loader
+  m_Name: Camera Poses Loader
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2807,8 +2789,20 @@ MonoBehaviour:
   cameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  extrinsicsPath: C:\Users\Melanie\Downloads\depth-anything-3\output\extrinsics.npy
-  intrinsicsPath: C:\Users\Melanie\Downloads\depth-anything-3\output\intrinsics.npy
+  extrinsicsPath: C:\Users\Melanie\Downloads\Image Sequences\Reading\DA3\extrinsics.npy
+  intrinsicsPath: C:\Users\Melanie\Downloads\Image Sequences\Reading\DA3\intrinsics.npy
+--- !u!114 &1285201271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1285201267}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce7a784827215b841b95e69d05260468, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1286519983
 GameObject:
   m_ObjectHideFlags: 0
@@ -3461,7 +3455,7 @@ Camera:
     height: 1
   near clip plane: 0.01
   far clip plane: 1000
-  field of view: 60
+  field of view: 32
   orthographic: 0
   orthographic size: 5
   m_Depth: 0

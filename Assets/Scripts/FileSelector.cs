@@ -1,4 +1,4 @@
-using SFB;
+﻿using SFB;
 using UnityEngine;
 using System.IO;
 using System.Linq;
@@ -9,66 +9,32 @@ public class FileSelector : MonoBehaviour
     public Canvas menu;
     public SplatAnimator animator;
 
-    private string colorFolder;
-    private string depthFolder;
-
-    private List<string> colourFolders = new List<string>();
-    private List<string> depthFolders = new List<string>();
+    private List<string> colourFolders = new();
+    private List<string> depthFolders = new();
 
     public void SelectColorFolder()
     {
-        string[] paths = StandaloneFileBrowser.OpenFolderPanel(
-            "Select Color Folder",
-            "",
-            false
-        );
-
-        if (paths.Length > 0)
-        {
-            colorFolder = paths[0];
-            colourFolders.Add(colorFolder);
-            Debug.Log($"Added color folder {colourFolders.Count - 1}: {colorFolder}");
-        }
+        var paths = StandaloneFileBrowser.OpenFolderPanel("Select Color Folder", "", false);
+        if (paths.Length > 0) colourFolders.Add(paths[0]);
     }
 
     public void SelectDepthFolder()
     {
-        string[] paths = StandaloneFileBrowser.OpenFolderPanel(
-            "Select Depth Folder",
-            "",
-            false
-        );
-
-        if (paths.Length > 0)
-        {
-            depthFolder = paths[0];
-            depthFolders.Add(depthFolder);
-            Debug.Log($"Added depth folder {depthFolders.Count - 1}: {depthFolder}");
-        }
+        var paths = StandaloneFileBrowser.OpenFolderPanel("Select Depth Folder", "", false);
+        if (paths.Length > 0) depthFolders.Add(paths[0]);
     }
 
     public void StartAnimation()
     {
-        Debug.Log("StartAnimation called");
-        Debug.Log($"Animator in FileSelector: {animator.name}");
         int camCount = animator.numCameras;
 
-        if (colourFolders.Count < camCount || depthFolders.Count < camCount)
-        {
-            Debug.LogError($"Not enough folders selected. Needed {camCount}, got {colourFolders.Count} color and {depthFolders.Count} depth.");
-            return;
-        }
-
-        animator.colorFrames = new Texture2D[animator.numCameras][];
-        Debug.Log("Allocated colorFrames");
-
-        animator.depthFrames = new Texture2D[animator.numCameras][];
-        Debug.Log("Allocated depthFrames");
+        animator.colorFrames = new Texture2D[camCount][];
+        animator.depthFramesNpy = new float[camCount][,];
 
         for (int i = 0; i < camCount; i++)
         {
-            animator.colorFrames[i] = LoadFolder(colourFolders[i]);
-            animator.depthFrames[i] = LoadFolder(depthFolders[i]);
+            animator.colorFrames[i] = LoadColorFolder(colourFolders[i]);
+            animator.depthFramesNpy[i] = LoadDepthFolder(depthFolders[i]);
         }
 
         animator.StartPlayback();
@@ -77,26 +43,28 @@ public class FileSelector : MonoBehaviour
             menu.enabled = false;
     }
 
-    Texture2D[] LoadFolder(string folder)
+    Texture2D[] LoadColorFolder(string folder)
     {
-        string[] files = Directory.GetFiles(folder, "*.png")
-                                  .OrderBy(f => f)
-                                  .ToArray();
+        return Directory.GetFiles(folder, "*.png")
+            .OrderBy(f => f)
+            .Select(f =>
+            {
+                var bytes = File.ReadAllBytes(f);
+                var tex = new Texture2D(2, 2);
+                tex.LoadImage(bytes);
+                return tex;
+            })
+            .ToArray();
+    }
 
-        Texture2D[] textures = new Texture2D[files.Length];
+    // IMPORTANT: one depth frame per camera (THIS is your current design)
+    float[,] LoadDepthFolder(string folder)
+    {
+        var files = Directory.GetFiles(folder, "*.npy")
+            .OrderBy(f => f)
+            .ToArray();
 
-        for (int i = 0; i < files.Length; i++)
-        {
-            byte[] bytes = File.ReadAllBytes(files[i]);
-
-            Texture2D tex = new Texture2D(2, 2);
-            tex.LoadImage(bytes);
-
-            textures[i] = tex;
-        }
-
-        Debug.Log($"Loaded {textures.Length} images from {folder}");
-
-        return textures;
+        int w, h;
+        return NpyFloatLoader.Load2D(files[0], out w, out h);
     }
 }
