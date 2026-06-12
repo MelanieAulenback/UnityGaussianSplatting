@@ -1,6 +1,7 @@
-﻿using UnityEngine;
-using UnityEngine.VFX;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.VFX;
 
 public class SplatAnimator : MonoBehaviour
 {
@@ -11,8 +12,9 @@ public class SplatAnimator : MonoBehaviour
     public Texture2D depthMap;
 
     [HideInInspector] public Texture2D[][] colorFrames;
-    [HideInInspector] public Texture2D[][] depthFrames;
-
+    //[HideInInspector] public Texture2D[][] depthFrames;
+    public List<List<float[,,]>> depthFrames =
+        new List<List<float[,,]>>();
     private int currentFrame = 0;
 
     public float fps = 30f;

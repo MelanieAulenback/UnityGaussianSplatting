@@ -299,10 +299,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   splats: []
   renderCameras: []
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 0}
 --- !u!114 &46632186
@@ -611,10 +608,7 @@ MonoBehaviour:
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
 --- !u!1 &330585543
@@ -1343,10 +1337,7 @@ MonoBehaviour:
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
 --- !u!114 &746755238
@@ -1986,7 +1977,6 @@ GameObject:
   - component: {fileID: 916050665}
   - component: {fileID: 916050664}
   - component: {fileID: 916050663}
-  - component: {fileID: 916050662}
   - component: {fileID: 916050661}
   m_Layer: 0
   m_Name: FrontSplat
@@ -2013,24 +2003,9 @@ MonoBehaviour:
   renderCameras:
   - {fileID: 1637734291}
   - {fileID: 1219461228}
-  colorImage: {fileID: 0}
-  depthMap: {fileID: 0}
   fps: 30
-  IsReady: 0
   numCameras: 2
   loadingBar: {fileID: 1550501812}
---- !u!114 &916050662
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 916050660}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1afb782debb10a043bf968ed483cf633, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &916050663
 MonoBehaviour:
   m_ObjectHideFlags: 2

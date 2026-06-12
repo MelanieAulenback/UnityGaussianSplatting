@@ -69,13 +69,15 @@ public class FileSelector : MonoBehaviour
         animator.colorFrames = new Texture2D[animator.numCameras][];
         Debug.Log("Allocated colorFrames");
 
-        //animator.depthFrames = new Texture2D[animator.numCameras][];
+        animator.depthFrames = new List<List<float[,,]>>();        //animator.depthFrames = new Texture2D[animator.numCameras][];
         //Debug.Log("Allocated depthFrames");
 
         for (int i = 0; i < camCount; i++)
         {
             animator.colorFrames[i] = LoadFolder(colourFolders[i]);
-            //animator.depthFrames[i] = LoadFolder(depthFolders[i]);
+            animator.depthFrames.Add(
+                LoadDepthFolder(depthFolders[i])
+            );
         }
 
         animator.StartPlayback();
@@ -106,4 +108,25 @@ public class FileSelector : MonoBehaviour
 
         return textures;
     }
+
+    List<float[,,]> LoadDepthFolder(string folder)
+    {
+        string[] files = Directory.GetFiles(folder, "*.npy")
+                                  .OrderBy(f => f)
+                                  .ToArray();
+
+        List<float[,,]> frames = new List<float[,,]>();
+
+        foreach (string file in files)
+        {
+            frames.Add(
+                NpyLoader.LoadFloat32_3D(file)
+            );
+        }
+
+        Debug.Log($"Loaded {frames.Count} depth frames from {folder}");
+
+        return frames;
+    }
+
 }
