@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.VFX;
@@ -55,33 +56,31 @@ public class SplatAnimator : MonoBehaviour
     }
     public void StartPlayback()
     {
+        if (colorFrames == null || depthFrames == null)
+        {
+            Debug.LogError("Frames not loaded.");
+            return;
+        }
 
-        if (colorFrames == null)
+        string path = Path.Combine(Application.dataPath, "Data/unified_pointcloud.npy");
+
+        // LOAD ONCE
+        splats[0].referenceCam = renderCameras[0];
+        splats[0].referenceImage = colorFrames[0][0];
+
+        splats[0].LoadPointCloud(path);
+
+        Vector3[] sharedPositions = splats[0].Positions;
+        Color[] sharedColors = splats[0].Colors;
+        Vector3[] sharedAxes = splats[0].Axes;
+
+        for (int i = 1; i < numCameras; i++)
         {
-            Debug.LogError("Frames not loaded.");
-            return;
-        }
-        /*
-         * if (colorFrames == null || depthFrames == null)
-        {
-            Debug.LogError("Frames not loaded.");
-            return;
-        }
-        if (colorFrames[0].Length == 0 || depthFrames[0].Length == 0)
-        {
-            Debug.LogError("No images found.");
-            return;
-        }
-        */
-        for (int i = 0; i < numCameras; i++)
-        {
-            splats[i].GenerateFlatImage(
-                colorFrames[i][0],
-                renderCameras[i],
-                3f,
-                2,
-                0.01f
-            );
+            splats[i].Positions = sharedPositions;
+            splats[i].Colors = sharedColors;
+            splats[i].Axes = sharedAxes;
+
+            splats[i].InitializeBuffers();
         }
     }
 
@@ -97,10 +96,7 @@ public class SplatAnimator : MonoBehaviour
 
         for (int i = 0; i < numCameras; i++)
         {
-            splats[i].UpdateFlatImage(
-                colorFrames[i][currentFrame]
-            );
-            /*
+            
             if (colorFrames[i] == null || depthFrames[i] == null)
             {
                 Debug.LogError($"Camera {i} frames missing");
@@ -112,15 +108,16 @@ public class SplatAnimator : MonoBehaviour
                 Debug.LogError($"Frame overflow on camera {i}");
                 continue;
             }
-            
-            splats[i].UpdateFromDepthMap(
+
+            /*splats[i].UpdateFromDepthNpy(
                 colorFrames[i][currentFrame],
                 depthFrames[i][currentFrame],
-                0.5f,
-                50f,
+                renderCameras[i],
+                0.1f,
+                20f,
                 false
-            );
-            */
+            );*/
+
         }
     }
 }

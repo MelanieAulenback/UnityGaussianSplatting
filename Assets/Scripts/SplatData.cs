@@ -6,6 +6,9 @@ using UnityEngine;
 
 public class SplatData : ScriptableObject
 {
+    public Texture2D referenceImage;
+    public Camera referenceCam;
+
     public Vector3[] Positions;
     public Vector3[] Axes;
     public Color[] Colors;
@@ -175,16 +178,15 @@ public class SplatData : ScriptableObject
 
         UpdateColorsOnly(Colors);
     }
-    /*
-    public void GenerateFromDepthMap(
-        Texture2D colorImage,
-        Texture2D depthMap,
-        Camera cam,
-        float nearDepth,
-        float farDepth,
-        int pixelStep,
-        float gaussianSize,
-        bool invertDepth)
+    public void GenerateFromDepthNpy(
+    Texture2D colorImage,
+    float[,,] depthNpy,
+    Camera cam,
+    float nearDepth,
+    float farDepth,
+    int pixelStep,
+    float gaussianSize,
+    bool invertDepth)
     {
         Dispose();
 
@@ -197,10 +199,29 @@ public class SplatData : ScriptableObject
         var baseDepth = new List<float>();
         var uvs = new List<Vector2>();
 
-        int width = depthMap.width;
-        int height = depthMap.height;
+        int height = depthNpy.GetLength(0);
+        int width = depthNpy.GetLength(1);
 
-        float stepUV = 1f / Mathf.Max(width, height);
+        float minDepth = float.MaxValue;
+        float maxDepth = float.MinValue;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float d = depthNpy[y, x, 0];
+
+                if (d < minDepth)
+                    minDepth = d;
+
+                if (d > maxDepth)
+                    maxDepth = d;
+            }
+        }
+
+        Debug.Log(
+            $"Depth range: min={minDepth} max={maxDepth}"
+        );
 
         for (int y = 0; y < height; y += pixelStep)
         {
@@ -209,19 +230,35 @@ public class SplatData : ScriptableObject
                 float u = (x + 0.5f) / width;
                 float v = (y + 0.5f) / height;
 
-                float d = depthMap.GetPixelBilinear(u, v).r;
-                if (invertDepth) d = 1f - d;
-                if (d <= 1e-5f) continue;
+                float d = depthNpy[y, x, 0];
 
-                // IMPORTANT: treat as linear depth (NO 1/d inversion)
-                float depth = Mathf.Lerp(nearDepth, farDepth, d);
+                if (invertDepth)
+                    d = 1f - d;
 
-                Ray ray = cam.ViewportPointToRay(new Vector3(u, v, 0));
+                float depth =
+                    Mathf.Lerp(
+                        nearDepth,
+                        farDepth,
+                        Mathf.Clamp01(d)
+                    );
+
+                Ray ray =
+                    cam.ViewportPointToRay(
+                        new Vector3(u, v, 0)
+                    );
+
                 Vector3 rayDir = ray.direction.normalized;
 
-                Vector3 worldPos = cam.transform.position + rayDir * depth;
+                float viewSpaceZ = Mathf.Lerp(nearDepth, farDepth, Mathf.Clamp01(d));
 
-                Color col = colorImage.GetPixelBilinear(u, v);
+                // camera space point
+                Vector3 viewPos = new Vector3(u * 2f - 1f, v * 2f - 1f, 1f) * viewSpaceZ;
+
+                // better: use ray direction but normalize to camera forward basis
+                Vector3 worldPos = cam.transform.TransformPoint(rayDir * viewSpaceZ);
+
+                Color col =
+                    colorImage.GetPixelBilinear(u, v);
 
                 positions.Add(worldPos);
                 colors.Add(col);
@@ -252,37 +289,141 @@ public class SplatData : ScriptableObject
     // =========================
     // STABLE ANIMATION (NO RECONSTRUCTION)
     // =========================
-    public void UpdateFromDepthMap(
-        Texture2D colorImage,
-        Texture2D depthMap,
-        float nearDepth,
-        float farDepth,
-        bool invertDepth)
+    public void UpdateFromDepthNpy(
+    Texture2D colorImage,
+    float[,,] depthNpy,
+    Camera cam,
+    float nearDepth,
+    float farDepth,
+    bool invertDepth)
     {
-        if (uvCoords == null || basePositions == null || rayDirs == null)
+        if (uvCoords == null)
             return;
 
-        int count = Mathf.Min(Count, uvCoords.Length);
+        int width = depthNpy.GetLength(1);
+        int height = depthNpy.GetLength(0);
+
+        int count = Mathf.Min(
+            Positions.Length,
+            uvCoords.Length
+        );
 
         for (int i = 0; i < count; i++)
         {
             Vector2 uv = uvCoords[i];
 
-            float d = depthMap.GetPixelBilinear(uv.x, uv.y).r;
-            if (invertDepth) d = 1f - d;
+            int x =
+                Mathf.Clamp(
+                    (int)(uv.x * width),
+                    0,
+                    width - 1
+                );
 
-            float newDepth = Mathf.Lerp(nearDepth, farDepth, d);
+            int y =
+                Mathf.Clamp(
+                    (int)(uv.y * height),
+                    0,
+                    height - 1
+                );
 
-            float delta = newDepth - baseDepths[i];
+            float d = depthNpy[y, x, 0];
 
-            Positions[i] = basePositions[i] + rayDirs[i] * delta;
-            Colors[i] = colorImage.GetPixelBilinear(uv.x, uv.y);
+            if (invertDepth)
+                d = 1f - d;
+
+            float newDepth =
+                Mathf.Lerp(
+                    nearDepth,
+                    farDepth,
+                    Mathf.Clamp01(d)
+                );
+
+            float delta =
+                newDepth - baseDepths[i];
+
+            float viewSpaceZ = Mathf.Lerp(nearDepth, farDepth, Mathf.Clamp01(d));
+
+            Vector3 worldPos =
+                cam.transform.TransformPoint(rayDirs[i] * viewSpaceZ);
+
+            Positions[i] = worldPos;
+
+            Colors[i] =
+                colorImage.GetPixelBilinear(
+                    uv.x,
+                    uv.y
+                );
         }
 
         UpdatePositionsOnly(Positions);
         UpdateColorsOnly(Colors);
     }
-    */
+
+    public void LoadPointCloud(string path)
+    {
+        float[] data = NpyLoader.LoadFloatArray(path);
+
+        int count = data.Length / 3;
+
+        Positions = new Vector3[count];
+        Colors = new Color[count];
+        Axes = new Vector3[count * 3];
+
+        if (referenceImage == null || referenceCam == null)
+        {
+            Debug.LogError("Reference image or camera not assigned!");
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = data[i * 3 + 0];
+            float y = data[i * 3 + 1];
+            float z = data[i * 3 + 2];
+
+            Vector3 worldPos = new Vector3(x, y, z);
+            Positions[i] = worldPos;
+
+            // -----------------------------
+            // WORLD → CAMERA SPACE
+            // -----------------------------
+            Vector3 viewPos = referenceCam.worldToCameraMatrix.MultiplyPoint(worldPos);
+
+            if (viewPos.z <= 0)
+            {
+                Colors[i] = Color.black;
+                continue;
+            }
+
+            // -----------------------------
+            // PROJECT TO NDC
+            // -----------------------------
+            Vector3 clip = referenceCam.projectionMatrix.MultiplyPoint(viewPos);
+
+            float u = clip.x * 0.5f + 0.5f;
+            float v = clip.y * 0.5f + 0.5f;
+
+            // flip Y for textures
+            v = 1f - v;
+
+            // -----------------------------
+            // SAMPLE COLOR
+            // -----------------------------
+            Colors[i] = referenceImage.GetPixelBilinear(u, v);
+
+            // fallback safety
+            if (u < 0 || u > 1 || v < 0 || v > 1)
+                Colors[i] = Color.black;
+
+            // axes
+            Axes[i * 3 + 0] = Vector3.right * 0.01f;
+            Axes[i * 3 + 1] = Vector3.up * 0.01f;
+            Axes[i * 3 + 2] = Vector3.forward * 0.01f;
+        }
+
+        InitializeBuffers();
+    }
+
     // =========================
     // GPU UPDATES
     // =========================

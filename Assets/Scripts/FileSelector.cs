@@ -120,7 +120,7 @@ public class FileSelector : MonoBehaviour
         foreach (string file in files)
         {
             frames.Add(
-                NpyLoader.LoadFloat32_3D(file)
+                NpyLoader.LoadFloat32(file)
             );
         }
 
