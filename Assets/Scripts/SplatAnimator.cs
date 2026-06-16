@@ -1,92 +1,104 @@
 ﻿using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.VFX;
 
 public class SplatAnimator : MonoBehaviour
 {
-    public SplatData[] splats;
+    public Transform reconstructionRoot;
+
+    public GameObject pointCloud;
+    public GameObject[] glbCameras;
+
+    public SplatData splat;
     public Camera[] renderCameras;
 
-    public Texture2D colorImage;
-    public Texture2D depthMap;
+    public Texture2D[][] colorFrames;
 
-    [HideInInspector] public Texture2D[][] colorFrames;
-    //[HideInInspector] public Texture2D[][] depthFrames;
-    public List<List<float[,,]>> depthFrames =
-        new List<List<float[,,]>>();
-    private int currentFrame = 0;
-
+    public int numCameras = 2;
     public float fps = 30f;
 
+    public Slider loadingBar;
+
+    private int currentFrame = 0;
     private float timer;
     public bool IsReady;
 
-    private int lastFrame = -1;
-    public int numCameras = 2;
+    public float targetSceneSize = 10f;
 
-    public Slider loadingBar;
+    private void Start()
+    {
+        // =====================================================
+        // STEP 3: ATTACH EVERYTHING TO SAME ROOT
+        // =====================================================
+
+        if (reconstructionRoot != null)
+        {
+            pointCloud.transform.SetParent(reconstructionRoot);
+
+            foreach (var cam in glbCameras)
+            {
+                cam.transform.SetParent(reconstructionRoot);
+            }
+
+            foreach (var cam in renderCameras)
+            {
+                cam.transform.SetParent(reconstructionRoot);
+            }
+        }
+    }
 
     private void Update()
     {
         if (colorFrames == null)
-        {
             return;
-        }
-        if (colorFrames[0].Length == 0)
-        {
-            Debug.Log("No frames loaded");
+
+        if (colorFrames.Length == 0 || colorFrames[0].Length == 0)
             return;
-        }
-        else
+
+        IsReady = true;
+
+        timer += Time.deltaTime;
+        if (timer >= 1f / fps)
         {
-            IsReady = true;
-            timer += Time.deltaTime;
-
-            if (timer >= 1f / fps)
-            {
-                timer = 0f;
-                NextFrame();
-            }
-
-            //update progress bar
-            loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+            timer = 0f;
+            // NextFrame();
         }
+
+        loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
+
     public void StartPlayback()
     {
-        if (colorFrames == null || depthFrames == null)
+        if (colorFrames == null || colorFrames.Length == 0)
         {
             Debug.LogError("Frames not loaded.");
             return;
         }
 
-        string path = Path.Combine(Application.dataPath, "Data/unified_pointcloud.npy");
+        ApplyScale();
 
-        // LOAD ONCE
-        splats[0].referenceCam = renderCameras[0];
-        splats[0].referenceImage = colorFrames[0][0];
+        Texture2D[] images = new Texture2D[numCameras];
 
-        splats[0].LoadPointCloud(path);
+        for (int i = 0; i < numCameras; i++)
+            images[i] = colorFrames[i][0];
 
-        Vector3[] sharedPositions = splats[0].Positions;
-        Color[] sharedColors = splats[0].Colors;
-        Vector3[] sharedAxes = splats[0].Axes;
-
-        for (int i = 1; i < numCameras; i++)
-        {
-            splats[i].Positions = sharedPositions;
-            splats[i].Colors = sharedColors;
-            splats[i].Axes = sharedAxes;
-
-            splats[i].InitializeBuffers();
-        }
+        splat.GaussiansFromCloud(pointCloud, renderCameras, images, 0.01f);
     }
 
+    void ApplyScale()
+    {
+        Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
+
+        Bounds b = mesh.bounds;
+        float maxExtent = Mathf.Max(b.size.x, b.size.y, b.size.z);
+
+        float scale = targetSceneSize / maxExtent;
+
+        reconstructionRoot.localScale = Vector3.one * scale;
+    }
+    /*
     public void NextFrame()
     {
-        Debug.Log($"Frame {currentFrame}");
         int frameCount = colorFrames[0].Length;
 
         currentFrame++;
@@ -109,15 +121,13 @@ public class SplatAnimator : MonoBehaviour
                 continue;
             }
 
-            /*splats[i].UpdateFromDepthNpy(
+            splats[i].UpdateFromDepthMap(
                 colorFrames[i][currentFrame],
                 depthFrames[i][currentFrame],
                 renderCameras[i],
-                0.1f,
-                20f,
-                false
-            );*/
-
+                1f, 5f, 0.01f, true
+            );
         }
     }
+    */
 }

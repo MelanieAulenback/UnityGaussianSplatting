@@ -9,11 +9,8 @@ public class FileSelector : MonoBehaviour
     public Canvas menu;
     public SplatAnimator animator;
 
-    private string colorFolder;
-    private string depthFolder;
-
     private List<string> colourFolders = new List<string>();
-    private List<string> depthFolders = new List<string>();
+    //private List<string> depthFolders = new List<string>();
 
     public void SelectColorFolder()
     {
@@ -25,12 +22,12 @@ public class FileSelector : MonoBehaviour
 
         if (paths.Length > 0)
         {
-            colorFolder = paths[0];
-            colourFolders.Add(colorFolder);
-            Debug.Log($"Added color folder {colourFolders.Count - 1}: {colorFolder}");
+            colourFolders.Add(paths[0]);
+            Debug.Log($"Added color folder {colourFolders.Count - 1}: {paths[0]}");
         }
     }
 
+    /*
     public void SelectDepthFolder()
     {
         string[] paths = StandaloneFileBrowser.OpenFolderPanel(
@@ -41,43 +38,36 @@ public class FileSelector : MonoBehaviour
 
         if (paths.Length > 0)
         {
-            depthFolder = paths[0];
-            depthFolders.Add(depthFolder);
-            Debug.Log($"Added depth folder {depthFolders.Count - 1}: {depthFolder}");
+            depthFolders.Add(paths[0]);
+            Debug.Log($"Added depth folder {depthFolders.Count - 1}: {paths[0]}");
         }
     }
-
+    */
     public void StartAnimation()
     {
-        Debug.Log("StartAnimation called");
-        Debug.Log($"Animator in FileSelector: {animator.name}");
         int camCount = animator.numCameras;
 
         if (colourFolders.Count < camCount)
         {
-            Debug.LogError($"Not enough folders selected. Needed {camCount}, got {colourFolders.Count} color");
+            Debug.LogError($"Not enough color folders. Need {camCount}");
             return;
         }
-
         /*
-        if (colourFolders.Count < camCount || depthFolders.Count < camCount)
+        if (depthFolders.Count < camCount)
         {
-            Debug.LogError($"Not enough folders selected. Needed {camCount}, got {colourFolders.Count} color and {depthFolders.Count} depth.");
+            Debug.LogError($"Not enough depth folders. Need {camCount}");
             return;
         }
         */
-        animator.colorFrames = new Texture2D[animator.numCameras][];
-        Debug.Log("Allocated colorFrames");
-
-        animator.depthFrames = new List<List<float[,,]>>();        //animator.depthFrames = new Texture2D[animator.numCameras][];
-        //Debug.Log("Allocated depthFrames");
+        animator.colorFrames = new Texture2D[camCount][];
+        //animator.depthFrames = new Texture2D[camCount][];
+        //animator.depthFrames = new List<List<float[,]>>();
 
         for (int i = 0; i < camCount; i++)
         {
             animator.colorFrames[i] = LoadFolder(colourFolders[i]);
-            animator.depthFrames.Add(
-                LoadDepthFolder(depthFolders[i])
-            );
+            //animator.depthFrames[i] = LoadFolder(depthFolders[i]);
+            //animator.depthFrames.Add(LoadDepthFolder(depthFolders[i]));
         }
 
         animator.StartPlayback();
@@ -86,11 +76,14 @@ public class FileSelector : MonoBehaviour
             menu.enabled = false;
     }
 
-    Texture2D[] LoadFolder(string folder)
+    // =====================================================
+    // COLOR LOADING
+    // =====================================================
+    Texture2D[] LoadColorFolder(string folder)
     {
         string[] files = Directory.GetFiles(folder, "*.png")
-                                  .OrderBy(f => f)
-                                  .ToArray();
+            .OrderBy(f => f)
+            .ToArray();
 
         Texture2D[] textures = new Texture2D[files.Length];
 
@@ -104,29 +97,103 @@ public class FileSelector : MonoBehaviour
             textures[i] = tex;
         }
 
-        Debug.Log($"Loaded {textures.Length} images from {folder}");
-
         return textures;
     }
 
-    List<float[,,]> LoadDepthFolder(string folder)
+    // =====================================================
+    // DEPTH LOADING (PNG OR NPY)
+    // =====================================================
+    List<float[,]> LoadDepthFolder(string folder)
     {
-        string[] files = Directory.GetFiles(folder, "*.npy")
-                                  .OrderBy(f => f)
-                                  .ToArray();
+        string[] files = Directory.GetFiles(folder)
+            .Where(f => f.EndsWith(".npy") || f.EndsWith(".png"))
+            .OrderBy(f => f)
+            .ToArray();
 
-        List<float[,,]> frames = new List<float[,,]>();
+        List<float[,]> frames = new List<float[,]>();
 
         foreach (string file in files)
         {
-            frames.Add(
-                NpyLoader.LoadFloat32(file)
-            );
-        }
+            if (file.EndsWith(".npy"))
+            {
+                float[,] depth = NpyLoader.LoadFloat32_2D(file);
+                frames.Add(depth);
 
-        Debug.Log($"Loaded {frames.Count} depth frames from {folder}");
+                Debug.Log($"Loaded NPY depth: {Path.GetFileName(file)}");
+            }
+            else if (file.EndsWith(".png"))
+            {
+                float[,] depth = LoadDepthPNG(file);
+                frames.Add(depth);
+
+                Debug.Log($"Loaded PNG depth: {Path.GetFileName(file)}");
+            }
+        }
 
         return frames;
     }
 
+    // =====================================================
+    // PNG DEPTH → float[,]
+    // Treats RED channel as distance along ray (Z depth)
+    // =====================================================
+    float[,] LoadDepthPNG(string path)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+
+        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        tex.LoadImage(bytes);
+
+        int width = tex.width;
+        int height = tex.height;
+
+        float[,] depth = new float[width, height];
+
+        Color[] pixels = tex.GetPixels(); // faster + correct grayscale handling
+
+        for (int y = 0; y < height; y++)
+        {
+            int row = y * width;
+
+            for (int x = 0; x < width; x++)
+            {
+                Color c = pixels[row + x];
+
+                // grayscale-safe extraction (works whether PNG is RGB or true grayscale)
+                float d = c.r;
+
+                depth[x, y] = d;
+            }
+        }
+
+        return depth;
+    }
+
+    Texture2D[] LoadFolder(string folder)
+    {
+        string[] files = Directory.GetFiles(folder, "*.png")
+            .OrderBy(f => f)
+            .ToArray();
+
+        Texture2D[] textures = new Texture2D[files.Length];
+
+        for (int i = 0; i < files.Length; i++)
+        {
+            byte[] bytes = File.ReadAllBytes(files[i]);
+
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            tex.LoadImage(bytes);
+
+            Debug.Log(
+                $"Loaded: {Path.GetFileName(files[i])} | " +
+                $"{tex.width}x{tex.height}"
+            );
+
+            textures[i] = tex;
+        }
+
+        Debug.Log($"Loaded {textures.Length} PNGs from {folder}");
+
+        return textures;
+    }
 }

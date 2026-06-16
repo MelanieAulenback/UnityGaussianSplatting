@@ -1,8 +1,9 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class DA3CameraImporter : MonoBehaviour
 {
     public Camera[] cameras;
+    public GameObject[] glbCameraMeshes;
 
     public string extrinsicsPath;
     public string intrinsicsPath;
@@ -17,18 +18,20 @@ public class DA3CameraImporter : MonoBehaviour
     {
         Debug.Log("Loading DA3 camera data...");
 
-        extrinsics = NpyLoader.LoadFloat32(extrinsicsPath);
-        intrinsics = NpyLoader.LoadFloat32(intrinsicsPath);
-
-        Debug.Log($"Extrinsics shape: {extrinsics.GetLength(0)} x {extrinsics.GetLength(1)} x {extrinsics.GetLength(2)}");
-        Debug.Log($"Intrinsics shape: {intrinsics.GetLength(0)} x {intrinsics.GetLength(1)} x {intrinsics.GetLength(2)}");
+        extrinsics = NpyLoader.LoadFloat32_3D(extrinsicsPath);
+        intrinsics = NpyLoader.LoadFloat32_3D(intrinsicsPath);
 
         ApplyCameras();
     }
 
     void ApplyCameras()
     {
-        int count = Mathf.Min(cameras.Length, extrinsics.GetLength(0));
+        int count = Mathf.Min(
+            cameras.Length,
+            glbCameraMeshes.Length,
+            extrinsics.GetLength(0),
+            intrinsics.GetLength(0)
+        );
 
         for (int i = 0; i < count; i++)
             ApplyCamera(i);
@@ -38,48 +41,97 @@ public class DA3CameraImporter : MonoBehaviour
     {
         Camera cam = cameras[i];
 
-        // --------------------------
-        // EXTRINSICS (assume 3x4)
-        // --------------------------
-        Matrix4x4 w2c = Matrix4x4.identity;
+        // =====================================================
+        // GLB CAMERA MESH → POSE EXTRACTION
+        // =====================================================
 
-        for (int r = 0; r < 3; r++)
-            for (int c = 0; c < 4; c++)
-                w2c[r, c] = extrinsics[i, r, c];
+        GameObject glbCam = glbCameraMeshes[i];
+        Mesh mesh = glbCam.GetComponent<MeshFilter>().sharedMesh;
+        Transform t = glbCam.transform;
 
-        Matrix4x4 c2w = w2c.inverse;
+        Vector3[] vertices = mesh.vertices;
 
-        cam.transform.position = c2w.GetColumn(3);
-        cam.transform.rotation = Quaternion.LookRotation(
-            c2w.GetColumn(2),
-            c2w.GetColumn(1)
-        );
+        Vector3[] world = new Vector3[vertices.Length];
+        for (int j = 0; j < vertices.Length; j++)
+            world[j] = t.TransformPoint(vertices[j]);
 
-        // --------------------------
-        // INTRINSICS (safe indexing)
-        // --------------------------
+        // -----------------------------
+        // Camera position (centroid fallback)
+        // -----------------------------
+        Vector3 center = Vector3.zero;
+        for (int j = 0; j < world.Length; j++)
+            center += world[j];
+        center /= world.Length;
+
+        // -----------------------------
+        // Stable forward direction (geometry-based)
+        // -----------------------------
+        int farthest = 0;
+        float maxDist = 0f;
+
+        for (int j = 0; j < world.Length; j++)
+        {
+            float d = (world[j] - center).sqrMagnitude;
+            if (d > maxDist)
+            {
+                maxDist = d;
+                farthest = j;
+            }
+        }
+
+        Vector3 forward = (world[farthest] - center).normalized;
+        forward = -forward;
+
+        // -----------------------------
+        // Build stable orthonormal basis
+        // -----------------------------
+        Vector3 tempUp = Vector3.up;
+
+        if (Mathf.Abs(Vector3.Dot(tempUp, forward)) > 0.9f)
+            tempUp = Vector3.right;
+
+        Vector3 right = Vector3.Cross(tempUp, forward).normalized;
+        Vector3 up = Vector3.Cross(forward, right).normalized;
+
+        // -----------------------------
+        // Apply transform
+        // -----------------------------
+        cam.transform.position = center;
+        cam.transform.rotation = Quaternion.LookRotation(forward, up);
+
+        // =====================================================
+        // INTRINSICS
+        // =====================================================
+
         float fx = intrinsics[i, 0, 0];
         float fy = intrinsics[i, 1, 1];
         float cx = intrinsics[i, 0, 2];
         float cy = intrinsics[i, 1, 2];
 
-        ApplyIntrinsics(cam, fx, fy, cx, cy);
+        ApplyIntrinsics(cam, fx, fy, cx, cy, imageWidth, imageHeight);
 
         Debug.Log($"Camera {i} applied");
     }
 
-    void ApplyIntrinsics(Camera cam, float fx, float fy, float cx, float cy)
+    void ApplyIntrinsics(
+        Camera cam,
+        float fx,
+        float fy,
+        float cx,
+        float cy,
+        int width,
+        int height)
     {
         float near = cam.nearClipPlane;
         float far = cam.farClipPlane;
 
         Matrix4x4 proj = Matrix4x4.zero;
 
-        proj[0, 0] = 2f * fx / imageWidth;
-        proj[0, 2] = 1f - (2f * cx / imageWidth);
+        proj[0, 0] = 2f * fx / width;
+        proj[0, 2] = 1f - (2f * cx / width);
 
-        proj[1, 1] = 2f * fy / imageHeight;
-        proj[1, 2] = (2f * cy / imageHeight) - 1f;
+        proj[1, 1] = 2f * fy / height;
+        proj[1, 2] = (2f * cy / height) - 1f;
 
         proj[2, 2] = -(far + near) / (far - near);
         proj[2, 3] = -(2f * far * near) / (far - near);
@@ -87,6 +139,12 @@ public class DA3CameraImporter : MonoBehaviour
         proj[3, 2] = -1f;
 
         cam.projectionMatrix = proj;
-        cam.aspect = (float)imageWidth / imageHeight;
+
+        cam.aspect = (float)width / height;
+
+        cam.fieldOfView =
+            2f *
+            Mathf.Atan(height / (2f * fy)) *
+            Mathf.Rad2Deg;
     }
 }
