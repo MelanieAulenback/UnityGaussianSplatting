@@ -5,13 +5,15 @@ using UnityEngine.UI;
 public class UIManager : MonoBehaviour
 {
     public Canvas menu;
-    public Camera[] renderCams;
+    public SplatAnimator animator;
+    private Camera[] renderCams;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
     }
 
     // Update is called once per frame
@@ -20,6 +22,7 @@ public class UIManager : MonoBehaviour
         //if the menu's not visible, allow mouse to act as player's view and disable render cam
         if (menu.enabled == false)
         {
+            renderCams = animator.renderCameras;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
 

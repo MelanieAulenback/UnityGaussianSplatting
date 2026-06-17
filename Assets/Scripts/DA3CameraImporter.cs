@@ -1,12 +1,10 @@
-﻿using UnityEngine;
+﻿using System.IO;
+using UnityEngine;
 
 public class DA3CameraImporter : MonoBehaviour
 {
     public Camera[] cameras;
     public GameObject[] glbCameraMeshes;
-
-    public string extrinsicsPath;
-    public string intrinsicsPath;
 
     public int imageWidth = 504;
     public int imageHeight = 448;
@@ -14,17 +12,19 @@ public class DA3CameraImporter : MonoBehaviour
     private float[,,] extrinsics;
     private float[,,] intrinsics;
 
-    void Start()
+    public void InitializeCameras()
     {
         Debug.Log("Loading DA3 camera data...");
+
+        string extrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Extrinsics.npy");
+        string intrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Intrinsics.npy");
 
         extrinsics = NpyLoader.LoadFloat32_3D(extrinsicsPath);
         intrinsics = NpyLoader.LoadFloat32_3D(intrinsicsPath);
 
-        ApplyCameras();
     }
 
-    void ApplyCameras()
+    public void ApplyCameras()
     {
         int count = Mathf.Min(
             cameras.Length,
@@ -40,6 +40,7 @@ public class DA3CameraImporter : MonoBehaviour
     void ApplyCamera(int i)
     {
         Camera cam = cameras[i];
+        cam.gameObject.AddComponent<DepthVisibility>();
 
         // =====================================================
         // GLB CAMERA MESH → POSE EXTRACTION
@@ -109,6 +110,8 @@ public class DA3CameraImporter : MonoBehaviour
         float cy = intrinsics[i, 1, 2];
 
         ApplyIntrinsics(cam, fx, fy, cx, cy, imageWidth, imageHeight);
+
+        cam.depthTextureMode = DepthTextureMode.Depth;
 
         Debug.Log($"Camera {i} applied");
     }

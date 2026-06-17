@@ -1,74 +1,151 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System.IO;
+using System.Linq;
 
 public class SplatAnimator : MonoBehaviour
 {
+    public DA3CameraImporter importer;
+
     public Transform reconstructionRoot;
 
-    public GameObject pointCloud;
-    public GameObject[] glbCameras;
+    [Header("GLB Root")]
+    public GameObject glbRoot;
 
-    public SplatData splat;
+    [Header("Runtime")]
+    public GameObject pointCloud;
     public Camera[] renderCameras;
 
+    public SplatData splat;
     public Texture2D[][] colorFrames;
 
-    public int numCameras = 2;
+    public int numCameras;
     public float fps = 30f;
 
     public Slider loadingBar;
 
     private int currentFrame = 0;
     private float timer;
-    public bool IsReady;
 
     public float targetSceneSize = 10f;
 
-    private void Start()
+    // =====================================================
+    // INIT FROM GLB + DATASET
+    // =====================================================
+    public void InitializeScene()
     {
-        // =====================================================
-        // STEP 3: ATTACH EVERYTHING TO SAME ROOT
-        // =====================================================
+        SetupGLBGeometry();
+        CreateCamerasFromDataset();
 
-        if (reconstructionRoot != null)
+        importer.InitializeCameras();
+        importer.cameras = renderCameras;
+        importer.glbCameraMeshes = glbCameras;
+
+        importer.ApplyCameras(); // or move logic public
+
+        AttachToRoot();
+    }
+
+    // -----------------------------------------------------
+    // 1. GLB parsing: geometry_0 = splats, geometry_1+ = cameras
+    // -----------------------------------------------------
+    void SetupGLBGeometry()
+    {
+        if (glbRoot == null)
         {
+            Debug.LogError("GLB Root not assigned!");
+            return;
+        }
+
+        List<Transform> geometries = new List<Transform>();
+
+        foreach (Transform child in glbRoot.transform)
+        {
+            if (child.name.StartsWith("geometry_"))
+                geometries.Add(child);
+        }
+
+        geometries = geometries
+            .OrderBy(g => g.name)
+            .ToList();
+
+        if (geometries.Count == 0)
+        {
+            Debug.LogError("No geometry_* found in GLB!");
+            return;
+        }
+
+        // geometry_0 = point cloud
+        pointCloud = geometries[0].gameObject;
+
+        // geometry_1+ = camera anchors
+        glbCameras = geometries.Skip(1).Select(g => g.gameObject).ToArray();
+
+        Debug.Log($"GLB parsed: 1 pointcloud + {glbCameras.Length} cameras");
+    }
+
+    public GameObject[] glbCameras;
+
+    // -----------------------------------------------------
+    // 2. Create Unity cameras from dataset count
+    // -----------------------------------------------------
+    void CreateCamerasFromDataset()
+    {
+        string camerasPath = Path.Combine(FileSelector.datasetRoot, "Cameras");
+
+        string[] camFolders = Directory.GetDirectories(camerasPath)
+            .OrderBy(f => f)
+            .ToArray();
+
+        numCameras = camFolders.Length;
+
+        renderCameras = new Camera[numCameras];
+
+        for (int i = 0; i < numCameras; i++)
+        {
+            GameObject camObj = new GameObject($"RenderCam_{i:000}");
+            Camera cam = camObj.AddComponent<Camera>();
+
+            // optional tuning
+            cam.nearClipPlane = 0.01f;
+            cam.farClipPlane = 100f;
+
+            renderCameras[i] = cam;
+        }
+
+        Debug.Log($"Created {numCameras} Unity cameras");
+    }
+
+    // -----------------------------------------------------
+    // 3. Attach everything to root
+    // -----------------------------------------------------
+    void AttachToRoot()
+    {
+        if (reconstructionRoot == null)
+            return;
+
+        if (pointCloud != null)
             pointCloud.transform.SetParent(reconstructionRoot);
 
-            foreach (var cam in glbCameras)
-            {
-                cam.transform.SetParent(reconstructionRoot);
-            }
+        foreach (var cam in glbCameras)
+            cam.transform.SetParent(reconstructionRoot);
 
-            foreach (var cam in renderCameras)
-            {
-                cam.transform.SetParent(reconstructionRoot);
-            }
-        }
+        foreach (var cam in renderCameras)
+            cam.transform.SetParent(reconstructionRoot);
     }
 
-    private void Update()
-    {
-        if (colorFrames == null)
-            return;
-
-        if (colorFrames.Length == 0 || colorFrames[0].Length == 0)
-            return;
-
-        IsReady = true;
-
-        timer += Time.deltaTime;
-        if (timer >= 1f / fps)
-        {
-            timer = 0f;
-            // NextFrame();
-        }
-
-        loadingBar.value = (float)currentFrame / colorFrames[0].Length;
-    }
-
+    // =====================================================
+    // PLAYBACK
+    // =====================================================
     public void StartPlayback()
     {
+        if (renderCameras == null || renderCameras.Length == 0)
+        {
+            Debug.LogError("renderCameras not initialized. Did you call InitializeScene()?");
+            return;
+        }
+
         if (colorFrames == null || colorFrames.Length == 0)
         {
             Debug.LogError("Frames not loaded.");
@@ -80,11 +157,16 @@ public class SplatAnimator : MonoBehaviour
         Texture2D[] images = new Texture2D[numCameras];
 
         for (int i = 0; i < numCameras; i++)
+        {
             images[i] = colorFrames[i][0];
+        }
 
         splat.GaussiansFromCloud(pointCloud, renderCameras, images, 0.01f);
     }
 
+    // =====================================================
+    // SCALE
+    // =====================================================
     void ApplyScale()
     {
         Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
@@ -96,6 +178,27 @@ public class SplatAnimator : MonoBehaviour
 
         reconstructionRoot.localScale = Vector3.one * scale;
     }
+
+    // =====================================================
+    // UPDATE (optional playback)
+    // =====================================================
+    private void Update()
+    {
+        if (colorFrames == null || colorFrames.Length == 0)
+            return;
+
+        timer += Time.deltaTime;
+
+        if (timer >= 1f / fps)
+        {
+            timer = 0f;
+            currentFrame++;
+        }
+
+        if (loadingBar != null && colorFrames.Length > 0)
+            loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+    }
+
     /*
     public void NextFrame()
     {
