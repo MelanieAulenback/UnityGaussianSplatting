@@ -71,8 +71,8 @@ public class SplatData : ScriptableObject
                 Texture2D image = images[camIndex];
                 DepthVisibility dv = depthCams[camIndex];
 
-                if (dv == null)
-                    continue;
+                //if (dv == null)
+                // continue;
 
                 Vector3 viewport = cam.WorldToViewportPoint(vertex);
 

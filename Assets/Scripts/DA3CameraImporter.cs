@@ -1,129 +1,95 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 public class DA3CameraImporter : MonoBehaviour
 {
+    [Header("Cameras")]
     public Camera[] cameras;
-    public GameObject[] glbCameraMeshes;
 
+    [Header("Intrinsics")]
     public int imageWidth = 504;
     public int imageHeight = 448;
 
+    [Header("DA3 Data")]
     private float[,,] extrinsics;
     private float[,,] intrinsics;
 
+    // -----------------------------
+    // INIT
+    // -----------------------------
     public void InitializeCameras()
     {
-        Debug.Log("Loading DA3 camera data...");
-
         string extrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Extrinsics.npy");
         string intrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Intrinsics.npy");
 
         extrinsics = NpyLoader.LoadFloat32_3D(extrinsicsPath);
         intrinsics = NpyLoader.LoadFloat32_3D(intrinsicsPath);
-
     }
 
+    // -----------------------------
+    // APPLY ALL CAMERAS
+    // -----------------------------
     public void ApplyCameras()
     {
-        int count = Mathf.Min(
-            cameras.Length,
-            glbCameraMeshes.Length,
-            extrinsics.GetLength(0),
-            intrinsics.GetLength(0)
-        );
+        int count = Mathf.Min(cameras.Length, extrinsics.GetLength(0));
 
         for (int i = 0; i < count; i++)
             ApplyCamera(i);
     }
 
+    // -----------------------------
+    // CORE
+    // -----------------------------
     void ApplyCamera(int i)
     {
         Camera cam = cameras[i];
-        cam.gameObject.AddComponent<DepthVisibility>();
-
-        // =====================================================
-        // GLB CAMERA MESH → POSE EXTRACTION
-        // =====================================================
-
-        GameObject glbCam = glbCameraMeshes[i];
-        Mesh mesh = glbCam.GetComponent<MeshFilter>().sharedMesh;
-        Transform t = glbCam.transform;
-
-        Vector3[] vertices = mesh.vertices;
-
-        Vector3[] world = new Vector3[vertices.Length];
-        for (int j = 0; j < vertices.Length; j++)
-            world[j] = t.TransformPoint(vertices[j]);
 
         // -----------------------------
-        // Camera position (centroid fallback)
+        // INTRINSICS (unchanged)
         // -----------------------------
-        Vector3 center = Vector3.zero;
-        for (int j = 0; j < world.Length; j++)
-            center += world[j];
-        center /= world.Length;
-
-        // -----------------------------
-        // Stable forward direction (geometry-based)
-        // -----------------------------
-        int farthest = 0;
-        float maxDist = 0f;
-
-        for (int j = 0; j < world.Length; j++)
-        {
-            float d = (world[j] - center).sqrMagnitude;
-            if (d > maxDist)
-            {
-                maxDist = d;
-                farthest = j;
-            }
-        }
-
-        Vector3 forward = (world[farthest] - center).normalized;
-        forward = -forward;
-
-        // -----------------------------
-        // Build stable orthonormal basis
-        // -----------------------------
-        Vector3 tempUp = Vector3.up;
-
-        if (Mathf.Abs(Vector3.Dot(tempUp, forward)) > 0.9f)
-            tempUp = Vector3.right;
-
-        Vector3 right = Vector3.Cross(tempUp, forward).normalized;
-        Vector3 up = Vector3.Cross(forward, right).normalized;
-
-        // -----------------------------
-        // Apply transform
-        // -----------------------------
-        cam.transform.position = center;
-        cam.transform.rotation = Quaternion.LookRotation(forward, up);
-
-        // =====================================================
-        // INTRINSICS
-        // =====================================================
-
         float fx = intrinsics[i, 0, 0];
         float fy = intrinsics[i, 1, 1];
         float cx = intrinsics[i, 0, 2];
         float cy = intrinsics[i, 1, 2];
 
         ApplyIntrinsics(cam, fx, fy, cx, cy, imageWidth, imageHeight);
-
-        cam.depthTextureMode = DepthTextureMode.Depth;
-
-        Debug.Log($"Camera {i} applied");
     }
 
-    void ApplyIntrinsics(
-        Camera cam,
-        float fx,
-        float fy,
-        float cx,
-        float cy,
-        int width,
-        int height)
+    // -----------------------------
+    // LOAD EXTRINSICS
+    // -----------------------------
+    public Matrix4x4 LoadMatrix(int i)
+    {
+        Matrix4x4 m = Matrix4x4.identity;
+
+        m.m00 = extrinsics[i, 0, 0];
+        m.m01 = extrinsics[i, 0, 1];
+        m.m02 = extrinsics[i, 0, 2];
+        m.m03 = extrinsics[i, 0, 3];
+
+        m.m10 = extrinsics[i, 1, 0];
+        m.m11 = extrinsics[i, 1, 1];
+        m.m12 = extrinsics[i, 1, 2];
+        m.m13 = extrinsics[i, 1, 3];
+
+        m.m20 = extrinsics[i, 2, 0];
+        m.m21 = extrinsics[i, 2, 1];
+        m.m22 = extrinsics[i, 2, 2];
+        m.m23 = extrinsics[i, 2, 3];
+
+        m.m30 = 0;
+        m.m31 = 0;
+        m.m32 = 0;
+        m.m33 = 1;
+
+        return m;
+    }
+
+    // -----------------------------
+    // INTRINSICS
+    // -----------------------------
+    void ApplyIntrinsics(Camera cam, float fx, float fy, float cx, float cy, int width, int height)
     {
         float near = cam.nearClipPlane;
         float far = cam.farClipPlane;
@@ -142,12 +108,6 @@ public class DA3CameraImporter : MonoBehaviour
         proj[3, 2] = -1f;
 
         cam.projectionMatrix = proj;
-
         cam.aspect = (float)width / height;
-
-        cam.fieldOfView =
-            2f *
-            Mathf.Atan(height / (2f * fy)) *
-            Mathf.Rad2Deg;
     }
 }

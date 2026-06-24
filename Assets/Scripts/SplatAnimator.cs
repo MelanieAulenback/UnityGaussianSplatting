@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
 using System.IO;
 using System.Linq;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.UIElements;
 
 public class SplatAnimator : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class SplatAnimator : MonoBehaviour
     [Header("Runtime")]
     public GameObject pointCloud;
     public Camera[] renderCameras;
+    public GameObject[] glbCameras;
 
     public SplatData splat;
     public Texture2D[][] colorFrames;
@@ -23,7 +25,7 @@ public class SplatAnimator : MonoBehaviour
     public int numCameras;
     public float fps = 30f;
 
-    public Slider loadingBar;
+    //public Slider loadingBar;
 
     private int currentFrame = 0;
     private float timer;
@@ -38,13 +40,16 @@ public class SplatAnimator : MonoBehaviour
         SetupGLBGeometry();
         CreateCamerasFromDataset();
 
+        AttachToRoot();
+        ApplyScale();
+
         importer.InitializeCameras();
         importer.cameras = renderCameras;
-        importer.glbCameraMeshes = glbCameras;
 
-        importer.ApplyCameras(); // or move logic public
+        importer.ApplyCameras(); 
 
-        AttachToRoot();
+        SetCamPositions();
+
     }
 
     // -----------------------------------------------------
@@ -83,9 +88,9 @@ public class SplatAnimator : MonoBehaviour
         glbCameras = geometries.Skip(1).Select(g => g.gameObject).ToArray();
 
         Debug.Log($"GLB parsed: 1 pointcloud + {glbCameras.Length} cameras");
+        
     }
 
-    public GameObject[] glbCameras;
 
     // -----------------------------------------------------
     // 2. Create Unity cameras from dataset count
@@ -106,6 +111,7 @@ public class SplatAnimator : MonoBehaviour
         {
             GameObject camObj = new GameObject($"RenderCam_{i:000}");
             Camera cam = camObj.AddComponent<Camera>();
+            camObj.AddComponent<DepthVisibility>(); 
 
             // optional tuning
             cam.nearClipPlane = 0.01f;
@@ -117,6 +123,38 @@ public class SplatAnimator : MonoBehaviour
         Debug.Log($"Created {numCameras} Unity cameras");
     }
 
+    public void SetCamPositions()
+    {
+        
+        for (int i = 0;i < renderCameras.Length;i++)
+        {
+            GameObject glbCam = glbCameras[i];
+            Mesh mesh = glbCam.GetComponent<MeshFilter>().sharedMesh;
+            MeshFilter mf = glbCam.GetComponent<MeshFilter>();
+            Transform t = glbCam.transform;
+
+            /*
+            for (int j = 0; j < mesh.vertexCount; j++)
+            {
+                Debug.Log($"cam{i} vertex {j}: {mesh.vertices[j]}");
+                Debug.Log($"cam{i} vertex {j} world space: {t.TransformPoint(mesh.vertices[j])}");
+            }
+            */
+
+            if (CameraMeshPose.TryGetPose(importer, i, mf, out Vector3 pos, out Quaternion rot))
+            {
+                Debug.Log($"Recovered Position: {pos}");
+                Debug.Log($"Recovered Rotation: {rot.eulerAngles}");
+                Debug.DrawRay(pos, rot * Vector3.forward * 0.2f, Color.blue, 100f);
+                Debug.DrawRay(pos, rot * Vector3.up * 0.2f, Color.green, 100f);
+                Debug.DrawRay(pos, rot * Vector3.right * 0.2f, Color.red, 100f);
+            }
+
+            //change just the position to the glb camera's position
+            renderCameras[i].transform.position = pos;
+            renderCameras[i].transform.rotation = rot;
+        }
+    }
     // -----------------------------------------------------
     // 3. Attach everything to root
     // -----------------------------------------------------
@@ -151,8 +189,6 @@ public class SplatAnimator : MonoBehaviour
             Debug.LogError("Frames not loaded.");
             return;
         }
-
-        ApplyScale();
 
         Texture2D[] images = new Texture2D[numCameras];
 
@@ -195,8 +231,8 @@ public class SplatAnimator : MonoBehaviour
             currentFrame++;
         }
 
-        if (loadingBar != null && colorFrames.Length > 0)
-            loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+        //if (loadingBar != null && colorFrames.Length > 0)
+         //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
 
     /*
