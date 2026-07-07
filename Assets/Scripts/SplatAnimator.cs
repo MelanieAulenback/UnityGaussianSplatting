@@ -2,6 +2,8 @@
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 
@@ -19,11 +21,23 @@ public class SplatAnimator : MonoBehaviour
     public Camera[] renderCameras;
     public GameObject[] glbCameras;
 
+    public RenderTexture[] depthMaps;
+    public RenderTexture[] linearDepthMaps;
+    public Texture2D[] cpuDepthMaps;
+
     public SplatData splat;
     public Texture2D[][] colorFrames;
+    public Texture2D[][] depthFrames;
+
+    public RenderTexture[] colorRenderTargets;
 
     public int numCameras;
     public float fps = 30f;
+
+    public ComputeShader splatCompute;
+
+    private int colourKernel;
+    private int finalizeKernel;
 
     //public Slider loadingBar;
 
@@ -31,6 +45,154 @@ public class SplatAnimator : MonoBehaviour
     private float timer;
 
     public float targetSceneSize = 10f;
+
+    void Start()
+    {
+        //colourKernel = splatCompute.FindKernel("ColourGaussians");
+        //finalizeKernel = splatCompute.FindKernel("FinalizeColours");
+    }
+
+    public void RunGPUColouring(int frame)
+    {
+        int count = splat.Count;
+
+        int kernel = splatCompute.FindKernel("ColourGaussians");
+
+
+        splat.ResetAccumulation();
+
+
+        for (int cam = 0; cam < numCameras; cam++)
+        {
+            Texture2D image = colorFrames[cam][frame];
+
+            splatCompute.SetInt("_GaussianCount", count);
+
+
+            Matrix4x4 vp =
+                GL.GetGPUProjectionMatrix(
+                    renderCameras[cam].projectionMatrix,
+                    true)
+                *
+                renderCameras[cam].worldToCameraMatrix;
+
+
+            splatCompute.SetMatrix("_ViewProj", vp);
+
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_Positions",
+                splat.PositionsBuffer
+            );
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_AccumColor",
+                splat.AccumColorBuffer
+            );
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_Contribution",
+                splat.ContributionBuffer
+            );
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_DebugBuffer",
+                splat.DebugBuffer
+            );
+
+            splatCompute.SetTexture(
+                kernel,
+                "_ColorTex",
+                image
+            );
+
+
+            splatCompute.SetMatrix(
+                "_WorldToCamera",
+                renderCameras[cam].worldToCameraMatrix
+            );
+
+
+            int groups = Mathf.CeilToInt(count / 256f);
+
+            splatCompute.Dispatch(
+                kernel,
+                groups,
+                1,
+                1
+            );
+
+            Vector4[] debug = new Vector4[2];
+
+            splat.DebugBuffer.GetData(debug);
+
+            Debug.Log(
+                "Gaussian depth: " + debug[0].x +
+                " | Buffer depth distance: " + debug[0].y +
+                " | Raw depth: " + debug[0].z
+            );
+
+            Debug.Log(
+                "UV: " + debug[1].x + ", " + debug[1].y +
+                " clipW: " + debug[1].z
+            );
+
+        }
+
+
+        // finalize average colors
+        int finalize = splatCompute.FindKernel("FinalizeColours");
+
+        splatCompute.SetInt("_GaussianCount", count);
+
+        splatCompute.SetBuffer(
+            finalize,
+            "_AccumColor",
+            splat.AccumColorBuffer
+        );
+
+        splatCompute.SetBuffer(
+            finalize,
+            "_Contribution",
+            splat.ContributionBuffer
+        );
+
+        splatCompute.SetBuffer(
+            finalize,
+            "_FinalColor",
+            splat.FinalColorBuffer
+        );
+
+
+        int finalGroups = Mathf.CeilToInt(count / 256f);
+
+        splatCompute.Dispatch(
+            finalize,
+            finalGroups,
+            1,
+            1
+        );
+
+
+        AsyncGPUReadback.Request(
+            splat.FinalColorBuffer,
+            request =>
+            {
+                var data = request.GetData<Vector4>();
+
+                Color[] colors = new Color[count];
+
+                for (int i = 0; i < count; i++)
+                    colors[i] = data[i];
+
+                splat.Colors = colors;
+                splat.UpdateColorsOnly(colors);
+            });
+    }
 
     // =====================================================
     // INIT FROM GLB + DATASET
@@ -41,7 +203,7 @@ public class SplatAnimator : MonoBehaviour
         CreateCamerasFromDataset();
 
         AttachToRoot();
-        ApplyScale();
+        //ApplyScale();
 
         importer.InitializeCameras();
         importer.cameras = renderCameras;
@@ -49,7 +211,6 @@ public class SplatAnimator : MonoBehaviour
         importer.ApplyCameras(); 
 
         SetCamPositions();
-
     }
 
     // -----------------------------------------------------
@@ -106,21 +267,19 @@ public class SplatAnimator : MonoBehaviour
         numCameras = camFolders.Length;
 
         renderCameras = new Camera[numCameras];
+        colorRenderTargets = new RenderTexture[numCameras];
 
         for (int i = 0; i < numCameras; i++)
         {
             GameObject camObj = new GameObject($"RenderCam_{i:000}");
             Camera cam = camObj.AddComponent<Camera>();
-            camObj.AddComponent<DepthVisibility>(); 
-
-            // optional tuning
-            cam.nearClipPlane = 0.01f;
-            cam.farClipPlane = 100f;
 
             renderCameras[i] = cam;
+
         }
 
         Debug.Log($"Created {numCameras} Unity cameras");
+
     }
 
     public void SetCamPositions()
@@ -143,16 +302,17 @@ public class SplatAnimator : MonoBehaviour
 
             if (CameraMeshPose.TryGetPose(importer, i, mf, out Vector3 pos, out Quaternion rot))
             {
-                Debug.Log($"Recovered Position: {pos}");
-                Debug.Log($"Recovered Rotation: {rot.eulerAngles}");
                 Debug.DrawRay(pos, rot * Vector3.forward * 0.2f, Color.blue, 100f);
                 Debug.DrawRay(pos, rot * Vector3.up * 0.2f, Color.green, 100f);
                 Debug.DrawRay(pos, rot * Vector3.right * 0.2f, Color.red, 100f);
+
             }
 
             //change just the position to the glb camera's position
             renderCameras[i].transform.position = pos;
             renderCameras[i].transform.rotation = rot;
+
+            renderCameras[i].aspect = (float)colorFrames[i][0].width / colorFrames[i][0].height;
         }
     }
     // -----------------------------------------------------
@@ -197,7 +357,9 @@ public class SplatAnimator : MonoBehaviour
             images[i] = colorFrames[i][0];
         }
 
-        splat.GaussiansFromCloud(pointCloud, renderCameras, images, 0.01f);
+        splat.GaussiansFromCloud(pointCloud, 0.01f);
+
+        RunGPUColouring(0);
     }
 
     // =====================================================
@@ -213,6 +375,9 @@ public class SplatAnimator : MonoBehaviour
         float scale = targetSceneSize / maxExtent;
 
         reconstructionRoot.localScale = Vector3.one * scale;
+
+        Debug.Log(reconstructionRoot.lossyScale);
+        Debug.Log(reconstructionRoot.localScale);
     }
 
     // =====================================================
@@ -232,7 +397,7 @@ public class SplatAnimator : MonoBehaviour
         }
 
         //if (loadingBar != null && colorFrames.Length > 0)
-         //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
+        //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
 
     /*

@@ -1,0 +1,91 @@
+#pragma kernel ColourGaussians
+#pragma kernel FinalizeColours
+
+
+Texture2D<float4> _ColorTex;
+SamplerState sampler_ColorTex;
+
+
+StructuredBuffer<float3> _Positions;
+
+RWStructuredBuffer<float4> _FinalColor;
+RWStructuredBuffer<float4> _AccumColor;
+RWStructuredBuffer<uint> _Contribution;
+
+RWStructuredBuffer<float4> _DebugBuffer;
+
+
+float4x4 _ViewProj;
+float4x4 _WorldToCamera;
+
+int _GaussianCount;
+
+[numthreads(256, 1, 1)]
+void ColourGaussians(uint id : SV_DispatchThreadID)
+{
+    if (id >= _GaussianCount)
+        return;
+
+
+    float3 worldPos = _Positions[id];
+
+
+    float4 clip = mul(
+        _ViewProj,
+        float4(worldPos, 1)
+    );
+
+
+    if (clip.w <= 0)
+        return;
+
+
+    float2 ndc = clip.xy / clip.w;
+
+
+    float2 uv;
+
+    uv.x = ndc.x * 0.5 + 0.5;
+    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+
+
+    if (uv.x < 0 || uv.x > 1 ||
+        uv.y < 0 || uv.y > 1)
+    {
+        return;
+    }
+
+    float4 color = _ColorTex.SampleLevel(
+        sampler_ColorTex,
+        uv,
+        0
+    );
+
+ 
+    _AccumColor[id] += color;
+    _Contribution[id]++;
+}
+
+
+
+[numthreads(256, 1, 1)]
+void FinalizeColours(uint id : SV_DispatchThreadID)
+{
+    if (id >= _GaussianCount)
+        return;
+
+
+    uint count = _Contribution[id];
+
+
+    if (count == 0)
+    {
+        _FinalColor[id] = float4(0, 0, 0, 1);
+    }
+    else
+    {
+        float4 color = _AccumColor[id] / count;
+        color.a = 1;
+        _FinalColor[id] = color;
+    }
+}

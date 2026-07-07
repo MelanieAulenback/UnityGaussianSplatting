@@ -17,10 +17,10 @@ MonoBehaviour:
   categories: []
   uiBounds:
     serializedVersion: 2
-    x: -534
+    x: -541
     y: -562
-    width: 1901
-    height: 2578
+    width: 1908
+    height: 2580
 --- !u!114 &114350483966674976
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -1348,7 +1348,7 @@ MonoBehaviour:
   m_Children:
   - {fileID: 8926484042661616555}
   - {fileID: 8926484042661616562}
-  m_UIPosition: {x: 941, y: 1643}
+  m_UIPosition: {x: 940, y: 1643}
   m_UICollapsed: 0
   m_UISuperCollapsed: 0
   m_InputSlots:
@@ -1410,84 +1410,84 @@ MonoBehaviour:
         shaderGraph: {fileID: 4333940904281232215, guid: ba6fab3c458b65948b6b54b560dc6ad8, type: 3}
         materialSettings:
           m_PropertyNames:
-          - _RenderQueueType
           - _AddPrecomputedVelocity
-          - _DepthOffsetEnable
-          - _ConservativeDepthOffsetEnable
-          - _TransparentWritingMotionVec
           - _AlphaCutoffEnable
-          - _TransparentSortPriority
-          - _UseShadowThreshold
-          - _DoubleSidedEnable
-          - _DoubleSidedNormalMode
-          - _DoubleSidedGIMode
-          - _TransparentDepthPrepassEnable
-          - _TransparentDepthPostpassEnable
-          - _SurfaceType
-          - _BlendMode
-          - _SrcBlend
-          - _DstBlend
-          - _AlphaSrcBlend
           - _AlphaDstBlend
-          - _ZWrite
-          - _TransparentZWrite
+          - _AlphaSrcBlend
+          - _BlendMode
+          - _ConservativeDepthOffsetEnable
           - _CullMode
-          - _EnableFogOnTransparent
           - _CullModeForward
-          - _TransparentCullMode
+          - _DepthOffsetEnable
+          - _DoubleSidedEnable
+          - _DoubleSidedGIMode
+          - _DoubleSidedNormalMode
+          - _DstBlend
+          - _EnableBlendModePreserveSpecularLighting
+          - _EnableFogOnTransparent
           - _OpaqueCullMode
+          - _RenderQueueType
+          - _SrcBlend
+          - _StencilRef
+          - _StencilRefDepth
+          - _StencilRefDistortionVec
+          - _StencilRefMV
+          - _StencilWriteMask
+          - _StencilWriteMaskDepth
+          - _StencilWriteMaskDistortionVec
+          - _StencilWriteMaskMV
+          - _SurfaceType
+          - _TransparentBackfaceEnable
+          - _TransparentCullMode
+          - _TransparentDepthPostpassEnable
+          - _TransparentDepthPrepassEnable
+          - _TransparentSortPriority
+          - _TransparentWritingMotionVec
+          - _TransparentZWrite
+          - _UseShadowThreshold
           - _ZTestDepthEqualForOpaque
           - _ZTestTransparent
-          - _TransparentBackfaceEnable
-          - _EnableBlendModePreserveSpecularLighting
-          - _StencilRef
-          - _StencilWriteMask
-          - _StencilRefDepth
-          - _StencilWriteMaskDepth
-          - _StencilRefMV
-          - _StencilWriteMaskMV
-          - _StencilRefDistortionVec
-          - _StencilWriteMaskDistortionVec
+          - _ZWrite
           m_PropertyValues:
-          - 4
           - 0
           - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 0
-          - 1
-          - 2
-          - 0
-          - 0
-          - 0
-          - 1
-          - 0
-          - 1
           - 10
           - 1
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 1
+          - 0
+          - 2
           - 10
           - 0
-          - 0
-          - 0
           - 1
-          - 0
-          - 2
           - 2
           - 4
-          - 4
-          - 0
-          - 0
-          - 0
-          - 6
           - 1
-          - 9
+          - 0
+          - 1
+          - 4
           - 33
+          - 6
+          - 9
+          - 4
           - 43
+          - 1
+          - 0
+          - 2
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
+          - 0
           - 4
           - 4
-          renderQueue: -1
+          - 0
+          renderQueue: 3000
 --- !u!114 &8926484042661615541
 MonoBehaviour:
   m_ObjectHideFlags: 0

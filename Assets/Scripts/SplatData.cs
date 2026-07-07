@@ -1,15 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Unity.VisualScripting;
+using UnityEditor.Rendering;
 using UnityEngine;
+using UnityEngine.TestTools;
+using UnityEngine.UIElements;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.ToolTip;
 
 public class SplatData : ScriptableObject
 {
     public Vector3[] Positions;
     public Vector3[] Axes;
     public Color[] Colors;
-
-    private Vector2[] uvCoords;
-    private Vector3[] rayDirs;
 
     // =========================================================
     // BUFFERS (REQUIRED FOR BINDER)
@@ -23,6 +27,18 @@ public class SplatData : ScriptableObject
     private GraphicsBuffer _axesA;
     private GraphicsBuffer _axesB;
 
+    // =========================================================
+    // GPU COLOR ACCUMULATION (NEW)
+    // =========================================================
+    private GraphicsBuffer _accumColorBuffer;     // float4 per gaussian
+    private GraphicsBuffer _contributionBuffer;   // uint per gaussian
+
+    private GraphicsBuffer _finalColorBuffer;
+    public GraphicsBuffer FinalColorBuffer => _finalColorBuffer;
+
+    public GraphicsBuffer AccumColorBuffer => _accumColorBuffer;
+    public GraphicsBuffer ContributionBuffer => _contributionBuffer;
+
     public GraphicsBuffer PositionsBuffer => _positionsA;
     public GraphicsBuffer PositionsBufferOut => _positionsB;
 
@@ -32,101 +48,84 @@ public class SplatData : ScriptableObject
     public GraphicsBuffer AxesBuffer => _axesA;
     public GraphicsBuffer AxesBufferOut => _axesB;
 
+    private GraphicsBuffer _debugBuffer;
+
+    public GraphicsBuffer DebugBuffer => _debugBuffer;
+
+    ComputeBuffer vertexBuffer;
+    ComputeBuffer colorAccumBuffer;
+    ComputeBuffer countBuffer;
+
     public int Count => Positions != null ? Positions.Length : 0;
 
     public void GaussiansFromCloud(
     GameObject pointCloud,
-    Camera[] cameras,
-    Texture2D[] images,
     float gaussianSize)
     {
         Dispose();
 
-        var positions = new List<Vector3>();
-        var colors = new List<Color>();
-        var axes = new List<Vector3>();
+        // create lists for position, colour, and axes
+        //var positions = new List<Vector3>();
+        //var colors = new List<Color>();
+        //var axes = new List<Vector3>();
 
+        // get mesh
         Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
         Transform t = pointCloud.transform;
 
         Vector3[] verts = mesh.vertices;
 
+        Positions = new Vector3[verts.Length];
+        Colors = new Color[verts.Length];
+        Axes = new Vector3[verts.Length * 3];
+
+        // loop vertices
         for (int i = 0; i < verts.Length; i++)
-            verts[i] = t.TransformPoint(verts[i]);
-
-        // cache visibility components
-        DepthVisibility[] depthCams = new DepthVisibility[cameras.Length];
-
-        for (int i = 0; i < cameras.Length; i++)
-            depthCams[i] = cameras[i].GetComponent<DepthVisibility>();
-
-        foreach (Vector3 vertex in verts)
         {
-            Color accum = Color.black;
-            float weightSum = 0f;
+            Positions[i] = t.TransformPoint(verts[i]);
 
-            for (int camIndex = 0; camIndex < cameras.Length; camIndex++)
-            {
-                Camera cam = cameras[camIndex];
-                Texture2D image = images[camIndex];
-                DepthVisibility dv = depthCams[camIndex];
+            
+            // Placeholder. Compute shader overwrites these.
+            Colors[i] = Color.black;
 
-                //if (dv == null)
-                // continue;
-
-                Vector3 viewport = cam.WorldToViewportPoint(vertex);
-
-                if (viewport.z <= 0f)
-                    continue;
-
-                if (viewport.x < 0f || viewport.x > 1f ||
-                    viewport.y < 0f || viewport.y > 1f)
-                    continue;
-
-                if (!dv.IsVisible(vertex))
-                    continue;
-
-                Vector3 toPoint =
-                    (vertex - cam.transform.position).normalized;
-
-                float angleWeight =
-                    Mathf.Max(0f, Vector3.Dot(cam.transform.forward, toPoint));
-
-                float centerWeight =
-                    1f - Vector2.Distance(new Vector2(viewport.x, viewport.y), new Vector2(0.5f, 0.5f));
-
-                float w = angleWeight * centerWeight;
-
-                Color c = image.GetPixelBilinear(viewport.x, viewport.y);
-
-                accum += c * w;
-                weightSum += w;
-            }
-
-            if (weightSum < 1e-5f)
-            {
-                accum = Color.magenta; // debug fallback so you SEE failures
-            }
-            else
-            {
-                accum /= weightSum;
-            }
-            positions.Add(vertex);
-            colors.Add(accum);
+            int a = i * 3;
+            Axes[a] = Vector3.right * gaussianSize;
+            Axes[a + 1] = Vector3.up * gaussianSize;
+            Axes[a + 2] = Vector3.forward * gaussianSize;
+            /*
+            positions.Add(verts[v]);
+            colors.Add(vertexCol);
 
             axes.Add(Vector3.right * gaussianSize);
             axes.Add(Vector3.up * gaussianSize);
             axes.Add(Vector3.forward * gaussianSize);
+            */
         }
-
+        /*
         Positions = positions.ToArray();
         Colors = colors.ToArray();
         Axes = axes.ToArray();
+        */
 
         InitializeBuffers();
 
-        Debug.Log($"Generated {Positions.Length} gaussians with visibility + blending.");
+        Debug.Log($"Generated {Positions.Length} gaussians (weighted splat).");
     }
+
+    
+    public void ResetAccumulation()
+    {
+        if (_accumColorBuffer == null || _contributionBuffer == null) return;
+
+        int count = Count;
+
+        Vector4[] zeroColors = new Vector4[count];
+        uint[] zeroCounts = new uint[count];
+
+        _accumColorBuffer.SetData(zeroColors);
+        _contributionBuffer.SetData(zeroCounts);
+    }
+
     // =========================================================
     // BUFFERS
     // =========================================================
@@ -146,6 +145,27 @@ public class SplatData : ScriptableObject
         _axesA = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count * 3, sizeof(float) * 3);
         _axesB = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count * 3, sizeof(float) * 3);
 
+        // =====================================================
+        // NEW GPU ACCUMULATION BUFFERS
+        // =====================================================
+        _accumColorBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(float) * 4);
+        _contributionBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(uint));
+        _finalColorBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(float) * 4);
+        
+        // init arrays
+        Vector4[] zeroColors = new Vector4[count];
+        uint[] zeroCounts = new uint[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            zeroColors[i] = Vector4.zero;
+            zeroCounts[i] = 0;
+        }
+
+        _accumColorBuffer.SetData(zeroColors);
+        _contributionBuffer.SetData(zeroCounts);
+
+        //upload data
         _positionsA.SetData(Positions);
         _positionsB.SetData(Positions);
 
@@ -154,6 +174,14 @@ public class SplatData : ScriptableObject
 
         _axesA.SetData(Axes);
         _axesB.SetData(Axes);
+
+        _finalColorBuffer.SetData(zeroColors);
+
+        _debugBuffer = new GraphicsBuffer(
+            GraphicsBuffer.Target.Structured,
+            1,
+            sizeof(float) * 8
+        );
     }
 
     public void UpdatePositionsOnly(Vector3[] p)
@@ -176,5 +204,9 @@ public class SplatData : ScriptableObject
         _colorsB?.Dispose(); _colorsB = null;
         _axesA?.Dispose(); _axesA = null;
         _axesB?.Dispose(); _axesB = null;
+        _accumColorBuffer?.Dispose(); _accumColorBuffer = null;
+        _contributionBuffer?.Dispose(); _contributionBuffer = null;
+        _debugBuffer?.Dispose();
+        _debugBuffer = null;
     }
 }

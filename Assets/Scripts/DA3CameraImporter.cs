@@ -8,8 +8,8 @@ public class DA3CameraImporter : MonoBehaviour
     public Camera[] cameras;
 
     [Header("Intrinsics")]
-    public int imageWidth = 504;
-    public int imageHeight = 448;
+    public static int imageWidth = 504;
+    public static int imageHeight = 448;
 
     [Header("DA3 Data")]
     private float[,,] extrinsics;
@@ -41,7 +41,7 @@ public class DA3CameraImporter : MonoBehaviour
     // -----------------------------
     // CORE
     // -----------------------------
-    void ApplyCamera(int i)
+    public void ApplyCamera(int i)
     {
         Camera cam = cameras[i];
 
@@ -107,7 +107,8 @@ public class DA3CameraImporter : MonoBehaviour
 
         proj[3, 2] = -1f;
 
-        cam.projectionMatrix = proj;
+        //cam.projectionMatrix = proj;
+        cam.projectionMatrix = GL.GetGPUProjectionMatrix(proj, false);
         cam.aspect = (float)width / height;
     }
 }

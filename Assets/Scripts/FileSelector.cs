@@ -40,11 +40,14 @@ public class FileSelector : MonoBehaviour
         animator.numCameras = camFolders.Length;
 
         animator.colorFrames = new Texture2D[camFolders.Length][];
+        animator.depthFrames = new Texture2D[camFolders.Length][];
+        animator.depthMaps = new RenderTexture[camFolders.Length];
 
         // ONLY LOAD DATA — DO NOT START PLAYBACK
         for (int i = 0; i < camFolders.Length; i++)
         {
             string colourPath = Path.Combine(camFolders[i], "Colour");
+            string depthPath = Path.Combine(camFolders[i], "Depth");
 
             if (!Directory.Exists(colourPath))
             {
@@ -53,6 +56,7 @@ public class FileSelector : MonoBehaviour
             }
 
             animator.colorFrames[i] = LoadFolder(colourPath);
+            animator.depthFrames[i] = LoadFolder(depthPath);
         }
 
         Debug.Log("Dataset loaded. Ready to start animation.");

@@ -1,5 +1,7 @@
 using UnityEngine.VFX;
 using UnityEngine.VFX.Utility;
+using UnityEngine;
+
 
 [VFXBinder("Splat Data")]
 public class SplatDataBinder : VFXBinderBase {
@@ -26,6 +28,7 @@ public class SplatDataBinder : VFXBinderBase {
     }
 
     public override void UpdateBinding(VisualEffect component) {
+
         component.SetUInt(_countProperty, (uint)Data.Count);
         component.SetGraphicsBuffer(_positionBufferProperty, Data.PositionsBuffer);
         component.SetGraphicsBuffer(_axisBufferProperty, Data.AxesBuffer);

@@ -256,7 +256,6 @@ GameObject:
   - component: {fileID: 330585546}
   - component: {fileID: 330585545}
   - component: {fileID: 330585547}
-  - component: {fileID: 330585549}
   m_Layer: 0
   m_Name: MainCamera
   m_TagString: MainCamera
@@ -374,18 +373,6 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
---- !u!114 &330585549
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 330585543}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 86c6556701af9e04380698b89f691b6e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &335711358 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3247949030751798102, guid: 710cf213c695b9e4b9285b48df8598b7, type: 3}
@@ -1212,9 +1199,13 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   glbCameras: []
+  depthMaps: []
+  linearDepthMaps: []
+  cpuDepthMaps: []
   splat: {fileID: 0}
   numCameras: 2
   fps: 30
+  splatCompute: {fileID: 0}
   targetSceneSize: 10
 --- !u!114 &746755239
 MonoBehaviour:
@@ -1944,9 +1935,13 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   glbCameras: []
+  depthMaps: []
+  linearDepthMaps: []
+  cpuDepthMaps: []
   splat: {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
   numCameras: 8
   fps: 30
+  splatCompute: {fileID: 7200000, guid: 35987ad1cba83e741aeb6d4fb8a32d39, type: 3}
   targetSceneSize: 10
 --- !u!114 &916050663
 MonoBehaviour:
@@ -2018,7 +2013,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 270950
+      - m_Value: 0
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2582,8 +2577,6 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
-  imageWidth: 504
-  imageHeight: 448
 --- !u!1 &1286519983
 GameObject:
   m_ObjectHideFlags: 0
@@ -4159,50 +4152,6 @@ MonoBehaviour:
     y: 0
     width: 1
     height: 1
---- !u!1 &2142011472
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2142011474}
-  - component: {fileID: 2142011473}
-  m_Layer: 0
-  m_Name: Exrinsics Visualizer
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!114 &2142011473
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2142011472}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b97db1a9c262ccc499355bf3204c3050, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!4 &2142011474
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2142011472}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.0014546425, y: 0.28482768, z: 0.71807885}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -4221,4 +4170,3 @@ SceneRoots:
   - {fileID: 719870275}
   - {fileID: 778021866}
   - {fileID: 413532862}
-  - {fileID: 2142011474}
