@@ -1,10 +1,15 @@
 #pragma kernel ColourGaussians
 #pragma kernel FinalizeColours
-
+#pragma kernel WriteDepth
+#pragma kernel ConvertDepth
+#pragma kernel ClearDepth
 
 Texture2D<float4> _ColorTex;
 SamplerState sampler_ColorTex;
 
+RWTexture2D<int> DepthTexture; // WriteDepth kernel writes here
+
+Texture2D<float> _DepthTex;
 
 StructuredBuffer<float3> _Positions;
 
@@ -14,11 +19,17 @@ RWStructuredBuffer<uint> _Contribution;
 
 RWStructuredBuffer<float4> _DebugBuffer;
 
+uint TextureWidth;
+uint TextureHeight;
 
 float4x4 _ViewProj;
 float4x4 _WorldToCamera;
+float4x4 Projection;
 
 int _GaussianCount;
+
+Texture2D<int> DepthIntTexture;
+RWTexture2D<float> DepthFloatTexture;
 
 [numthreads(256, 1, 1)]
 void ColourGaussians(uint id : SV_DispatchThreadID)
@@ -29,7 +40,13 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
 
     float3 worldPos = _Positions[id];
 
-
+    
+    float4 camPos = mul(_WorldToCamera, float4(worldPos, 1));
+    float gaussianDepth = -camPos.z;
+    
+    if (gaussianDepth <= 0)
+        return;
+    
     float4 clip = mul(
         _ViewProj,
         float4(worldPos, 1)
@@ -54,14 +71,59 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     {
         return;
     }
+    
+    
+    uint2 pixel;
 
+    pixel.x = uv.x * TextureWidth;
+    pixel.y = uv.y * TextureHeight;
+
+    float depthFromMap = _DepthTex.Load(
+    int3(pixel, 0)
+);
+    
+    if (id == 0)
+    {
+        _DebugBuffer[0] = float4(
+        gaussianDepth, // Gaussian camera distance
+        depthFromMap, // Depth texture distance
+        gaussianDepth - depthFromMap, // Difference
+        0
+    );
+
+        _DebugBuffer[1] = float4(
+        uv.x,
+        uv.y,
+        pixel.x,
+        pixel.y
+    );
+    }
+    
+    const float depthTolerance = 0.02; // 2 cm
+    
+    if (gaussianDepth > depthFromMap + depthTolerance)
+    {
+    // Something else is closer at this pixel.
+    // Don't color this Gaussian from this camera.
+        return;
+    }
+    
     float4 color = _ColorTex.SampleLevel(
         sampler_ColorTex,
         uv,
         0
     );
+    
+    /*
+    float depthVisual = saturate(depthFromMap / 10.0);
 
- 
+    float4 color = float4(
+    depthVisual,
+    depthVisual,
+    depthVisual,
+    1
+);
+ */
     _AccumColor[id] += color;
     _Contribution[id]++;
 }
@@ -88,4 +150,87 @@ void FinalizeColours(uint id : SV_DispatchThreadID)
         color.a = 1;
         _FinalColor[id] = color;
     }
+}
+
+[numthreads(64, 1, 1)]
+void WriteDepth(uint id : SV_DispatchThreadID)
+{
+    if (id >= _GaussianCount)
+        return;
+
+    float3 worldPos = _Positions[id];
+
+    float4 camPos = mul(
+        _WorldToCamera,
+        float4(worldPos, 1)
+    );
+
+    float depth = -camPos.z;
+
+    if (depth <= 0)
+        return;
+
+
+    float4 clipPos = mul(
+        Projection,
+        camPos
+    );
+
+    float2 ndc = clipPos.xy / clipPos.w;
+
+
+    uint2 pixel;
+
+    pixel.x =
+        (ndc.x * 0.5 + 0.5) * TextureWidth;
+
+    pixel.y =
+        (ndc.y * 0.5 + 0.5) * TextureHeight;
+
+
+    if (pixel.x >= TextureWidth ||
+        pixel.y >= TextureHeight)
+        return;
+
+
+    int depthInt = (int) (depth * 1000.0);
+
+
+    int oldDepth;
+
+    InterlockedMin(
+        DepthTexture[pixel],
+        depthInt,
+        oldDepth
+    );
+}
+
+[numthreads(8, 8, 1)]
+void ConvertDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= TextureWidth ||
+       id.y >= TextureHeight)
+        return;
+
+
+    int d = DepthIntTexture[id.xy];
+
+    if (d == 2147483647)
+    {
+        DepthFloatTexture[id.xy] = 9999;
+    }
+    else
+    {
+        DepthFloatTexture[id.xy] = d / 1000.0;
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ClearDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= TextureWidth ||
+       id.y >= TextureHeight)
+        return;
+
+    DepthTexture[id.xy] = 2147483647;
 }

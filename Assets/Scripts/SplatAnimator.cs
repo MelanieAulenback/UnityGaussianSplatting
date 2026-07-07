@@ -22,6 +22,7 @@ public class SplatAnimator : MonoBehaviour
     public GameObject[] glbCameras;
 
     public RenderTexture[] depthMaps;
+    public RenderTexture[] depthMinMaps;
     public RenderTexture[] linearDepthMaps;
     public Texture2D[] cpuDepthMaps;
 
@@ -45,6 +46,8 @@ public class SplatAnimator : MonoBehaviour
     private float timer;
 
     public float targetSceneSize = 10f;
+
+    public DepthDisplaySetup depthDisplay;
 
     void Start()
     {
@@ -110,6 +113,11 @@ public class SplatAnimator : MonoBehaviour
                 image
             );
 
+            splatCompute.SetTexture(
+                kernel,
+                "_DepthTex",
+                 depthMaps[cam]
+            );
 
             splatCompute.SetMatrix(
                 "_WorldToCamera",
@@ -132,15 +140,16 @@ public class SplatAnimator : MonoBehaviour
 
             Debug.Log(
                 "Gaussian depth: " + debug[0].x +
-                " | Buffer depth distance: " + debug[0].y +
-                " | Raw depth: " + debug[0].z
+                " | Depth map: " + debug[0].y +
+                " | Difference: " + debug[0].z
             );
 
             Debug.Log(
-                "UV: " + debug[1].x + ", " + debug[1].y +
-                " clipW: " + debug[1].z
+                "UV: " + debug[1].x +
+                ", " + debug[1].y +
+                " Pixel: " + debug[1].z +
+                ", " + debug[1].w
             );
-
         }
 
 
@@ -194,6 +203,72 @@ public class SplatAnimator : MonoBehaviour
             });
     }
 
+    public void GenerateGaussianDepth(
+    Camera cam,
+    SplatData splatData,
+    RenderTexture depthMinTexture)
+    {
+        Debug.Log($"Generating depth for {cam.name}");
+        int kernel = splatCompute.FindKernel("WriteDepth");
+
+        splatCompute.SetTexture(
+            kernel,
+            "DepthTexture",
+            depthMinTexture
+        );
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_Positions",
+            splatData.PositionsBuffer
+        );
+
+        splatCompute.SetMatrix(
+            "_WorldToCamera",
+            cam.worldToCameraMatrix
+        );
+
+        splatCompute.SetInt(
+            "TextureWidth",
+            depthMinTexture.width
+        );
+
+
+        splatCompute.SetInt(
+            "TextureHeight",
+            depthMinTexture.height
+        );
+
+        /*
+        Matrix4x4 vp =
+    GL.GetGPUProjectionMatrix(
+        cam.projectionMatrix,
+        true)
+    * cam.worldToCameraMatrix;
+
+        splatCompute.SetMatrix(
+            "_ViewProj",
+            vp
+        );
+        */
+
+        splatCompute.SetMatrix(
+            "Projection",
+            cam.projectionMatrix
+        );
+
+        int groups = Mathf.CeilToInt(
+            splatData.Count / 64.0f
+        );
+
+        splatCompute.Dispatch(
+            kernel,
+            groups,
+            1,
+            1
+        );
+    }
+
     // =====================================================
     // INIT FROM GLB + DATASET
     // =====================================================
@@ -211,6 +286,11 @@ public class SplatAnimator : MonoBehaviour
         importer.ApplyCameras(); 
 
         SetCamPositions();
+
+        if (depthDisplay != null)
+        {
+            depthDisplay.SetupDepthTexture();
+        }
     }
 
     // -----------------------------------------------------
@@ -268,6 +348,8 @@ public class SplatAnimator : MonoBehaviour
 
         renderCameras = new Camera[numCameras];
         colorRenderTargets = new RenderTexture[numCameras];
+        depthMaps = new RenderTexture[numCameras];
+        depthMinMaps = new RenderTexture[numCameras];
 
         for (int i = 0; i < numCameras; i++)
         {
@@ -276,6 +358,27 @@ public class SplatAnimator : MonoBehaviour
 
             renderCameras[i] = cam;
 
+            depthMaps[i] = new RenderTexture(
+                DA3CameraImporter.imageWidth,
+                DA3CameraImporter.imageHeight,
+                0,
+                RenderTextureFormat.RFloat
+            );
+
+            Debug.Log(depthMaps[i].GetInstanceID());
+
+            depthMaps[i].enableRandomWrite = true;
+            depthMaps[i].Create();
+
+            depthMinMaps[i] = new RenderTexture(
+                DA3CameraImporter.imageWidth,
+                DA3CameraImporter.imageHeight,
+                0,
+                RenderTextureFormat.RInt
+            );
+
+            depthMinMaps[i].enableRandomWrite = true;
+            depthMinMaps[i].Create();
         }
 
         Debug.Log($"Created {numCameras} Unity cameras");
@@ -359,6 +462,29 @@ public class SplatAnimator : MonoBehaviour
 
         splat.GaussiansFromCloud(pointCloud, 0.01f);
 
+        // Generate Gaussian depth maps
+        for (int i = 0; i < numCameras; i++)
+        {
+            // reset integer buffer
+            ClearDepthMin(depthMinMaps[i]);
+
+
+            // write closest gaussian depths
+            GenerateGaussianDepth(
+                renderCameras[i],
+                splat,
+                depthMinMaps[i]
+            );
+
+
+            // convert integer mm -> float meters
+            ConvertDepth(
+                depthMinMaps[i],
+                depthMaps[i]
+            );
+        }
+
+
         RunGPUColouring(0);
     }
 
@@ -378,6 +504,82 @@ public class SplatAnimator : MonoBehaviour
 
         Debug.Log(reconstructionRoot.lossyScale);
         Debug.Log(reconstructionRoot.localScale);
+    }
+
+    void ClearDepthMin(RenderTexture depthTexture)
+    {
+        int kernel = splatCompute.FindKernel("ClearDepth");
+
+        splatCompute.SetTexture(
+            kernel,
+            "DepthTexture",
+            depthTexture
+        );
+
+        splatCompute.SetInt(
+            "TextureWidth",
+            depthTexture.width
+        );
+
+        splatCompute.SetInt(
+            "TextureHeight",
+            depthTexture.height
+        );
+
+
+        int groupsX = Mathf.CeilToInt(depthTexture.width / 8f);
+        int groupsY = Mathf.CeilToInt(depthTexture.height / 8f);
+
+        splatCompute.Dispatch(
+            kernel,
+            groupsX,
+            groupsY,
+            1
+        );
+    }
+
+    void ConvertDepth(
+    RenderTexture depthMinTexture,
+    RenderTexture depthFloatTexture)
+    {
+        int kernel = splatCompute.FindKernel("ConvertDepth");
+
+
+        splatCompute.SetTexture(
+            kernel,
+            "DepthIntTexture",
+            depthMinTexture
+        );
+
+
+        splatCompute.SetTexture(
+            kernel,
+            "DepthFloatTexture",
+            depthFloatTexture
+        );
+
+
+        splatCompute.SetInt(
+            "TextureWidth",
+            depthFloatTexture.width
+        );
+
+        splatCompute.SetInt(
+            "TextureHeight",
+            depthFloatTexture.height
+        );
+
+
+        int groupsX = Mathf.CeilToInt(depthFloatTexture.width / 8f);
+        int groupsY = Mathf.CeilToInt(depthFloatTexture.height / 8f);
+
+
+        splatCompute.Dispatch(
+            kernel,
+            groupsX,
+            groupsY,
+            1
+        );
     }
 
     // =====================================================
