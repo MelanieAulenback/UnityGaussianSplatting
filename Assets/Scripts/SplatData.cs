@@ -27,6 +27,8 @@ public class SplatData : ScriptableObject
     private GraphicsBuffer _axesA;
     private GraphicsBuffer _axesB;
 
+    public GraphicsBuffer BestCameraScoreBuffer;
+
     // =========================================================
     // GPU COLOR ACCUMULATION (NEW)
     // =========================================================
@@ -145,6 +147,11 @@ public class SplatData : ScriptableObject
         _axesA = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count * 3, sizeof(float) * 3);
         _axesB = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count * 3, sizeof(float) * 3);
 
+        BestCameraScoreBuffer = new GraphicsBuffer(
+            GraphicsBuffer.Target.Structured,
+            Count,
+            sizeof(float)
+        );
         // =====================================================
         // NEW GPU ACCUMULATION BUFFERS
         // =====================================================
@@ -179,8 +186,8 @@ public class SplatData : ScriptableObject
 
         _debugBuffer = new GraphicsBuffer(
             GraphicsBuffer.Target.Structured,
-            1,
-            sizeof(float) * 8
+            3,
+            sizeof(float) * 4
         );
     }
 

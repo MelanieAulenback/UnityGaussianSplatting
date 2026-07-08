@@ -64,6 +64,15 @@ public class SplatAnimator : MonoBehaviour
 
         splat.ResetAccumulation();
 
+        // Reset best camera scores
+        float[] initialScores = new float[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            initialScores[i] = float.MaxValue;
+        }
+
+        splat.BestCameraScoreBuffer.SetData(initialScores);
 
         for (int cam = 0; cam < numCameras; cam++)
         {
@@ -71,6 +80,24 @@ public class SplatAnimator : MonoBehaviour
 
             splatCompute.SetInt("_GaussianCount", count);
 
+            splatCompute.SetInt(
+                "ColorTextureWidth",
+                image.width
+            );
+
+            splatCompute.SetInt(
+                "ColorTextureHeight",
+                image.height
+            );
+
+            splatCompute.SetInt("TextureWidth", depthMaps[cam].width);
+            splatCompute.SetInt("TextureHeight", depthMaps[cam].height);
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_BestCameraScore",
+                splat.BestCameraScoreBuffer
+            );
 
             Matrix4x4 vp =
                 GL.GetGPUProjectionMatrix(
@@ -134,14 +161,12 @@ public class SplatAnimator : MonoBehaviour
                 1
             );
 
-            Vector4[] debug = new Vector4[2];
+            Vector4[] debug = new Vector4[3];
 
             splat.DebugBuffer.GetData(debug);
 
             Debug.Log(
-                "Gaussian depth: " + debug[0].x +
-                " | Depth map: " + debug[0].y +
-                " | Difference: " + debug[0].z
+                $"Gaussian={debug[0].x}  Closest={debug[0].y}  Center={debug[0].z}  Score={debug[0].w}"
             );
 
             Debug.Log(
@@ -149,6 +174,11 @@ public class SplatAnimator : MonoBehaviour
                 ", " + debug[1].y +
                 " Pixel: " + debug[1].z +
                 ", " + debug[1].w
+            );
+
+            Debug.Log(
+                "Depth size: " + debug[2].x + "," + debug[2].y +
+                " Color size: " + debug[2].z + "," + debug[2].w
             );
         }
 
@@ -178,14 +208,14 @@ public class SplatAnimator : MonoBehaviour
 
 
         int finalGroups = Mathf.CeilToInt(count / 256f);
-
+        
         splatCompute.Dispatch(
             finalize,
             finalGroups,
             1,
             1
         );
-
+        
 
         AsyncGPUReadback.Request(
             splat.FinalColorBuffer,
@@ -239,7 +269,7 @@ public class SplatAnimator : MonoBehaviour
             depthMinTexture.height
         );
 
-        /*
+        
         Matrix4x4 vp =
     GL.GetGPUProjectionMatrix(
         cam.projectionMatrix,
@@ -250,12 +280,12 @@ public class SplatAnimator : MonoBehaviour
             "_ViewProj",
             vp
         );
-        */
 
-        splatCompute.SetMatrix(
-            "Projection",
-            cam.projectionMatrix
-        );
+        splatCompute.SetBuffer(
+                kernel,
+                "_DebugBuffer",
+                splat.DebugBuffer
+            );
 
         int groups = Mathf.CeilToInt(
             splatData.Count / 64.0f

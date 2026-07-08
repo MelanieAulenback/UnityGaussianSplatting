@@ -3,7 +3,7 @@ using UnityEngine;
 public class SplatGizmoDrawer : MonoBehaviour {
     public SplatData SplatData;
     public int MaxPoints = 1000;
-    public float Radius = 0.05f;
+    public float Radius = 0.001f;
 
     private void OnDrawGizmos() {
         if (!SplatData) return;
