@@ -166,7 +166,7 @@ public class SplatAnimator : MonoBehaviour
             splat.DebugBuffer.GetData(debug);
 
             Debug.Log(
-                $"Gaussian={debug[0].x}  Closest={debug[0].y}  Center={debug[0].z}  Score={debug[0].w}"
+                $"Gaussian depth={debug[0].x}  depth map depth={debug[0].y}  difference={debug[0].z}  Score={debug[0].w}"
             );
 
             Debug.Log(
@@ -247,6 +247,14 @@ public class SplatAnimator : MonoBehaviour
             depthMinTexture
         );
 
+        for (int cameraIndex = 0; cameraIndex < numCameras; cameraIndex++)
+        {
+            splatCompute.SetTexture(
+                kernel,
+                "_DA3DepthTex",
+                depthFrames[cameraIndex][0]
+            );
+        }
         splatCompute.SetBuffer(
             kernel,
             "_Positions",
@@ -308,7 +316,7 @@ public class SplatAnimator : MonoBehaviour
         CreateCamerasFromDataset();
 
         AttachToRoot();
-        //ApplyScale();
+        ApplyScale();
 
         importer.InitializeCameras();
         importer.cameras = renderCameras;
