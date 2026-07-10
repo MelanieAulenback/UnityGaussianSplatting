@@ -5,7 +5,7 @@ using UnityEngine;
 
 [VFXBinder("Splat Data")]
 public class SplatDataBinder : VFXBinderBase {
-    public SplatData Data;
+    public SplatAnimator animator;
 
     [VFXPropertyBinding("System.UInt32")]
     private ExposedProperty _countProperty = "Count";
@@ -20,7 +20,7 @@ public class SplatDataBinder : VFXBinderBase {
     private ExposedProperty _colorBufferProperty = "ColorBuffer";
 
     public override bool IsValid(VisualEffect component) {
-        return Data != null &&
+        return animator != null &&
                component.HasUInt(_countProperty) &&
                component.HasGraphicsBuffer(_positionBufferProperty) &&
                component.HasGraphicsBuffer(_axisBufferProperty) &&
@@ -29,6 +29,7 @@ public class SplatDataBinder : VFXBinderBase {
 
     public override void UpdateBinding(VisualEffect component) {
 
+        SplatData Data = animator.CurrentSplat;
         component.SetUInt(_countProperty, (uint)Data.Count);
         component.SetGraphicsBuffer(_positionBufferProperty, Data.PositionsBuffer);
         component.SetGraphicsBuffer(_axisBufferProperty, Data.AxesBuffer);

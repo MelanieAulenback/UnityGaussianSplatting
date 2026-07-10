@@ -1171,7 +1171,6 @@ GameObject:
   - component: {fileID: 746755241}
   - component: {fileID: 746755240}
   - component: {fileID: 746755239}
-  - component: {fileID: 746755237}
   m_Layer: 0
   m_Name: 45FrontRightSplat
   m_TagString: Untagged
@@ -1179,41 +1178,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 0
---- !u!114 &746755237
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 746755236}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f4a1819e5ca040899fa61c1cfea4bfd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  importer: {fileID: 0}
-  reconstructionRoot: {fileID: 0}
-  glbRoot: {fileID: 0}
-  pointCloud: {fileID: 0}
-  renderCameras:
-  - {fileID: 0}
-  - {fileID: 0}
-  glbCameras: []
-  depthMaps: []
-  depthMinMaps: []
-  linearDepthMaps: []
-  cpuDepthMaps: []
-  splat: {fileID: 0}
-  colorFrames: []
-  depthFrames: []
-  colorRenderTargets: []
-  numCameras: 2
-  fps: 30
-  frameCount: 0
-  splatCompute: {fileID: 0}
-  currentFrame: 0
-  targetSceneSize: 10
-  depthDisplay: {fileID: 0}
 --- !u!114 &746755239
 MonoBehaviour:
   m_ObjectHideFlags: 2
@@ -1226,7 +1190,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6b23e4c8461b80e458b0acda332b8a17, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Data: {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
+  animator: {fileID: 0}
 --- !u!114 &746755240
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1946,7 +1910,9 @@ MonoBehaviour:
   depthMinMaps: []
   linearDepthMaps: []
   cpuDepthMaps: []
-  splat: {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
+  splatBuffers:
+  - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
+  - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
   colorFrames: []
   depthFrames: []
   colorRenderTargets: []
@@ -1969,7 +1935,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6b23e4c8461b80e458b0acda332b8a17, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Data: {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
+  animator: {fileID: 916050661}
 --- !u!114 &916050664
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2027,7 +1993,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 0
+      - m_Value: 270950
         m_Name: Count
         m_Overridden: 1
     m_Int:

@@ -27,7 +27,16 @@ public class SplatAnimator : MonoBehaviour
     public RenderTexture[] linearDepthMaps;
     public Texture2D[] cpuDepthMaps;
 
-    public SplatData splat;
+    public SplatData[] splatBuffers = new SplatData[2];
+
+    private int activeBuffer = 0;
+
+    public SplatData CurrentSplat =>
+        splatBuffers[activeBuffer];
+
+    public SplatData NextSplat =>
+        splatBuffers[1 - activeBuffer];
+
     public Texture2D[] colorFrames;
     public Texture2D[] depthFrames;
 
@@ -51,9 +60,9 @@ public class SplatAnimator : MonoBehaviour
 
     bool colourReady = false;
 
-    public void RunGPUColouring()
+    public void RunGPUColouring(SplatData targetSplat)
     {
-        int count = splat.Count;
+        int count = targetSplat.Count;
 
         int kernel = splatCompute.FindKernel("ColourGaussians");
 
@@ -61,7 +70,7 @@ public class SplatAnimator : MonoBehaviour
 
         colourReady = false;
 
-        splat.ResetAccumulation();
+        targetSplat.ResetAccumulation();
 
         // Reset best camera scores
         float[] initialScores = new float[count];
@@ -71,7 +80,7 @@ public class SplatAnimator : MonoBehaviour
             initialScores[i] = float.MaxValue;
         }
 
-        splat.BestCameraScoreBuffer.SetData(initialScores);
+        targetSplat.BestCameraScoreBuffer.SetData(initialScores);
 
         for (int cam = 0; cam < numCameras; cam++)
         {
@@ -95,7 +104,7 @@ public class SplatAnimator : MonoBehaviour
             splatCompute.SetBuffer(
                 kernel,
                 "_BestCameraScore",
-                splat.BestCameraScoreBuffer
+                targetSplat.BestCameraScoreBuffer
             );
 
             Matrix4x4 vp =
@@ -112,25 +121,25 @@ public class SplatAnimator : MonoBehaviour
             splatCompute.SetBuffer(
                 kernel,
                 "_Positions",
-                splat.PositionsBuffer
+                targetSplat.PositionsBuffer
             );
 
             splatCompute.SetBuffer(
                 kernel,
                 "_AccumColor",
-                splat.AccumColorBuffer
+                targetSplat.AccumColorBuffer
             );
 
             splatCompute.SetBuffer(
                 kernel,
                 "_Contribution",
-                splat.ContributionBuffer
+                targetSplat.ContributionBuffer
             );
 
             splatCompute.SetBuffer(
                 kernel,
                 "_DebugBuffer",
-                splat.DebugBuffer
+                targetSplat.DebugBuffer
             );
 
             splatCompute.SetTexture(
@@ -162,7 +171,7 @@ public class SplatAnimator : MonoBehaviour
 
             Vector4[] debug = new Vector4[3];
 
-            splat.DebugBuffer.GetData(debug);
+            targetSplat.DebugBuffer.GetData(debug);
 
             Debug.Log(
                 $"Gaussian depth={debug[0].x}  depth map depth={debug[0].y}  difference={debug[0].z}  Score={debug[0].w}"
@@ -190,19 +199,19 @@ public class SplatAnimator : MonoBehaviour
         splatCompute.SetBuffer(
             finalize,
             "_AccumColor",
-            splat.AccumColorBuffer
+            targetSplat.AccumColorBuffer
         );
 
         splatCompute.SetBuffer(
             finalize,
             "_Contribution",
-            splat.ContributionBuffer
+            targetSplat.ContributionBuffer
         );
 
         splatCompute.SetBuffer(
             finalize,
             "_FinalColor",
-            splat.FinalColorBuffer
+            targetSplat.FinalColorBuffer
         );
 
 
@@ -217,7 +226,7 @@ public class SplatAnimator : MonoBehaviour
 
 
         AsyncGPUReadback.Request(
-        splat.FinalColorBuffer,
+        targetSplat.FinalColorBuffer,
         request =>
         {
             if (request.hasError)
@@ -235,10 +244,12 @@ public class SplatAnimator : MonoBehaviour
                 colors[i] = data[i];
 
 
-            splat.Colors = colors;
-            splat.UpdateColorsOnly(colors);
+            targetSplat.Colors = colors;
+            targetSplat.UpdateColorsOnly(colors);
 
             colourReady = true;
+
+            SwapSplats();
         });
     }
 
@@ -300,7 +311,7 @@ public class SplatAnimator : MonoBehaviour
         splatCompute.SetBuffer(
                 kernel,
                 "_DebugBuffer",
-                splat.DebugBuffer
+                NextSplat.DebugBuffer
             );
 
         int groups = Mathf.CeilToInt(
@@ -485,7 +496,7 @@ public class SplatAnimator : MonoBehaviour
         }
 
 
-        splat.GaussiansFromCloud(pointCloud, 0.01f);
+        NextSplat.GaussiansFromCloud(pointCloud, 0.01f);
 
         // Generate Gaussian depth maps
         for (int i = 0; i < numCameras; i++)
@@ -497,7 +508,7 @@ public class SplatAnimator : MonoBehaviour
             // write closest gaussian depths
             GenerateGaussianDepth(
                 renderCameras[i],
-                splat,
+                NextSplat,
                 depthMinMaps[i],
                 i
             );
@@ -511,7 +522,7 @@ public class SplatAnimator : MonoBehaviour
         }
 
 
-        RunGPUColouring();
+        RunGPUColouring(NextSplat);
 
         callNextFrame = true;
 
@@ -720,7 +731,7 @@ public class SplatAnimator : MonoBehaviour
 
         LoadCurrentFrame();
 
-        splat.GaussiansFromCloud(pointCloud, 0.01f);
+        NextSplat.GaussiansFromCloud(pointCloud, 0.01f);
 
         for (int i = 0; i < numCameras; i++)
         {
@@ -741,7 +752,7 @@ public class SplatAnimator : MonoBehaviour
 
             GenerateGaussianDepth(
                 renderCameras[i],
-                splat,
+                NextSplat,
                 depthMinMaps[i],
                 i);
 
@@ -750,7 +761,15 @@ public class SplatAnimator : MonoBehaviour
                 depthMaps[i]);
         }
 
-        RunGPUColouring();
+        RunGPUColouring(NextSplat);
     }
-    
+
+    void SwapSplats()
+    {
+        activeBuffer = 1 - activeBuffer;
+
+        Debug.Log(
+            "Swapped to buffer " + activeBuffer
+        );
+    }
 }
