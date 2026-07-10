@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using Siccity.GLTFUtility;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
@@ -27,40 +28,38 @@ public class SplatAnimator : MonoBehaviour
     public Texture2D[] cpuDepthMaps;
 
     public SplatData splat;
-    public Texture2D[][] colorFrames;
-    public Texture2D[][] depthFrames;
+    public Texture2D[] colorFrames;
+    public Texture2D[] depthFrames;
 
     public RenderTexture[] colorRenderTargets;
 
     public int numCameras;
     public float fps = 30f;
+    public int frameCount;
 
     public ComputeShader splatCompute;
 
-    private int colourKernel;
-    private int finalizeKernel;
-
     //public Slider loadingBar;
 
-    private int currentFrame = 0;
+    public int currentFrame = 0;
     private float timer;
+    bool callNextFrame  = false;
 
     public float targetSceneSize = 10f;
 
     public DepthDisplaySetup depthDisplay;
 
-    void Start()
-    {
-        //colourKernel = splatCompute.FindKernel("ColourGaussians");
-        //finalizeKernel = splatCompute.FindKernel("FinalizeColours");
-    }
+    bool colourReady = false;
 
-    public void RunGPUColouring(int frame)
+    public void RunGPUColouring()
     {
         int count = splat.Count;
 
         int kernel = splatCompute.FindKernel("ColourGaussians");
 
+        int requestedFrame = currentFrame;
+
+        colourReady = false;
 
         splat.ResetAccumulation();
 
@@ -76,7 +75,7 @@ public class SplatAnimator : MonoBehaviour
 
         for (int cam = 0; cam < numCameras; cam++)
         {
-            Texture2D image = colorFrames[cam][frame];
+            Texture2D image = colorFrames[cam];
 
             splatCompute.SetInt("_GaussianCount", count);
 
@@ -215,28 +214,39 @@ public class SplatAnimator : MonoBehaviour
             1,
             1
         );
-        
+
 
         AsyncGPUReadback.Request(
-            splat.FinalColorBuffer,
-            request =>
+        splat.FinalColorBuffer,
+        request =>
+        {
+            if (request.hasError)
             {
-                var data = request.GetData<Vector4>();
+                Debug.LogError("Colour readback failed");
+                return;
+            }
 
-                Color[] colors = new Color[count];
 
-                for (int i = 0; i < count; i++)
-                    colors[i] = data[i];
+            var data = request.GetData<Vector4>();
 
-                splat.Colors = colors;
-                splat.UpdateColorsOnly(colors);
-            });
+            Color[] colors = new Color[data.Length];
+
+            for (int i = 0; i < data.Length; i++)
+                colors[i] = data[i];
+
+
+            splat.Colors = colors;
+            splat.UpdateColorsOnly(colors);
+
+            colourReady = true;
+        });
     }
 
     public void GenerateGaussianDepth(
     Camera cam,
     SplatData splatData,
-    RenderTexture depthMinTexture)
+    RenderTexture depthMinTexture,
+    int cameraIndex)
     {
         Debug.Log($"Generating depth for {cam.name}");
         int kernel = splatCompute.FindKernel("WriteDepth");
@@ -247,14 +257,12 @@ public class SplatAnimator : MonoBehaviour
             depthMinTexture
         );
 
-        for (int cameraIndex = 0; cameraIndex < numCameras; cameraIndex++)
-        {
-            splatCompute.SetTexture(
-                kernel,
-                "_DA3DepthTex",
-                depthFrames[cameraIndex][0]
-            );
-        }
+        splatCompute.SetTexture(
+            kernel,
+            "_DA3DepthTex",
+            depthFrames[cameraIndex]
+        );
+
         splatCompute.SetBuffer(
             kernel,
             "_Positions",
@@ -312,23 +320,11 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     public void InitializeScene()
     {
-        SetupGLBGeometry();
         CreateCamerasFromDataset();
-
-        AttachToRoot();
-        ApplyScale();
 
         importer.InitializeCameras();
         importer.cameras = renderCameras;
 
-        importer.ApplyCameras(); 
-
-        SetCamPositions();
-
-        if (depthDisplay != null)
-        {
-            depthDisplay.SetupDepthTexture();
-        }
     }
 
     // -----------------------------------------------------
@@ -376,9 +372,7 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     void CreateCamerasFromDataset()
     {
-        string camerasPath = Path.Combine(FileSelector.datasetRoot, "Cameras");
-
-        string[] camFolders = Directory.GetDirectories(camerasPath)
+        string[] camFolders = Directory.GetDirectories(FileSelector.frameFolders[currentFrame])
             .OrderBy(f => f)
             .ToArray();
 
@@ -397,13 +391,10 @@ public class SplatAnimator : MonoBehaviour
             renderCameras[i] = cam;
 
             depthMaps[i] = new RenderTexture(
-                DA3CameraImporter.imageWidth,
-                DA3CameraImporter.imageHeight,
-                0,
-                RenderTextureFormat.RFloat
-            );
-
-            Debug.Log(depthMaps[i].GetInstanceID());
+            DA3CameraImporter.imageWidth,
+            DA3CameraImporter.imageHeight,
+            0,
+            RenderTextureFormat.RFloat);
 
             depthMaps[i].enableRandomWrite = true;
             depthMaps[i].Create();
@@ -412,8 +403,7 @@ public class SplatAnimator : MonoBehaviour
                 DA3CameraImporter.imageWidth,
                 DA3CameraImporter.imageHeight,
                 0,
-                RenderTextureFormat.RInt
-            );
+                RenderTextureFormat.RInt);
 
             depthMinMaps[i].enableRandomWrite = true;
             depthMinMaps[i].Create();
@@ -453,7 +443,7 @@ public class SplatAnimator : MonoBehaviour
             renderCameras[i].transform.position = pos;
             renderCameras[i].transform.rotation = rot;
 
-            renderCameras[i].aspect = (float)colorFrames[i][0].width / colorFrames[i][0].height;
+            renderCameras[i].aspect = (float)colorFrames[i].width / colorFrames[i].height;
         }
     }
     // -----------------------------------------------------
@@ -479,6 +469,9 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     public void StartPlayback()
     {
+        InitializeScene();
+        LoadCurrentFrame();
+
         if (renderCameras == null || renderCameras.Length == 0)
         {
             Debug.LogError("renderCameras not initialized. Did you call InitializeScene()?");
@@ -491,12 +484,6 @@ public class SplatAnimator : MonoBehaviour
             return;
         }
 
-        Texture2D[] images = new Texture2D[numCameras];
-
-        for (int i = 0; i < numCameras; i++)
-        {
-            images[i] = colorFrames[i][0];
-        }
 
         splat.GaussiansFromCloud(pointCloud, 0.01f);
 
@@ -511,7 +498,8 @@ public class SplatAnimator : MonoBehaviour
             GenerateGaussianDepth(
                 renderCameras[i],
                 splat,
-                depthMinMaps[i]
+                depthMinMaps[i],
+                i
             );
 
 
@@ -523,7 +511,11 @@ public class SplatAnimator : MonoBehaviour
         }
 
 
-        RunGPUColouring(0);
+        RunGPUColouring();
+
+        callNextFrame = true;
+
+
     }
 
     // =====================================================
@@ -633,45 +625,132 @@ public class SplatAnimator : MonoBehaviour
         if (timer >= 1f / fps)
         {
             timer = 0f;
-            currentFrame++;
+            if (callNextFrame && colourReady)
+            {
+                NextFrame();
+                if (depthDisplay != null)
+                {
+                    depthDisplay.SetupDepthTexture();
+                }
+            }
         }
 
+        Debug.Log("Current frame: " + currentFrame);
         //if (loadingBar != null && colorFrames.Length > 0)
         //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
 
-    /*
+    void LoadCurrentFrame()
+    {
+        string frameFolder = FileSelector.frameFolders[currentFrame];
+
+        // ---------- Load GLB ----------
+        string glbPath = Directory.GetFiles(frameFolder, "*.glb")
+            .FirstOrDefault();
+
+        if (glbPath == null)
+        {
+            Debug.LogError($"No GLB found in {frameFolder}");
+            return;
+        }
+
+        // Destroy previous reconstruction
+        if (glbRoot != null)
+        {
+            Destroy(glbRoot);
+        }
+
+        glbRoot = Importer.LoadFromFile(glbPath);
+
+        if (glbRoot == null)
+        {
+            Debug.LogError("Failed to import GLB.");
+            return;
+        }
+
+        reconstructionRoot = glbRoot.transform;
+
+        //----------------------------------------------------
+        // Parse GLB
+        //----------------------------------------------------
+
+        SetupGLBGeometry();
+
+        AttachToRoot();
+
+        ApplyScale();
+
+        //----------------------------------------------------
+        // Load colour/depth images
+        //----------------------------------------------------
+
+        string camerasPath = Path.Combine(frameFolder, "Cameras");
+
+        string[] camFolders = Directory.GetDirectories(camerasPath)
+            .OrderBy(f => f)
+            .ToArray();
+
+        for (int cam = 0; cam < numCameras; cam++)
+        {
+            string colourFolder = Path.Combine(camFolders[cam], "Colour");
+            string depthFolder = Path.Combine(camFolders[cam], "Depth");
+
+            colorFrames[cam] = FileSelector.LoadSingleImage(colourFolder);
+            depthFrames[cam] = FileSelector.LoadSingleImage(depthFolder);
+        }
+
+        //----------------------------------------------------
+        // Update camera poses
+        //----------------------------------------------------
+
+        importer.ApplyCameras();
+
+        SetCamPositions();
+    }
+
+
+
     public void NextFrame()
     {
-        int frameCount = colorFrames[0].Length;
 
         currentFrame++;
 
         if (currentFrame >= frameCount)
             currentFrame = 0;
 
+        LoadCurrentFrame();
+
+        splat.GaussiansFromCloud(pointCloud, 0.01f);
+
         for (int i = 0; i < numCameras; i++)
         {
             
-            if (colorFrames[i] == null || depthFrames[i] == null)
+            if (colorFrames == null || depthFrames == null)
             {
                 Debug.LogError($"Camera {i} frames missing");
                 continue;
             }
 
-            if (currentFrame >= colorFrames[i].Length)
+            if (currentFrame >= frameCount)
             {
                 Debug.LogError($"Frame overflow on camera {i}");
                 continue;
             }
 
-            splats[i].UpdateFromDepthMap(
-                colorFrames[i][currentFrame],
-                depthFrames[i][currentFrame],
+            ClearDepthMin(depthMinMaps[i]);
+
+            GenerateGaussianDepth(
                 renderCameras[i],
-                1f, 5f, 0.01f, true
-            );
+                splat,
+                depthMinMaps[i],
+                i);
+
+            ConvertDepth(
+                depthMinMaps[i],
+                depthMaps[i]);
         }
+
+        RunGPUColouring();
     }
-    */
+    
 }

@@ -15,13 +15,18 @@ public class DA3CameraImporter : MonoBehaviour
     private float[,,] extrinsics;
     private float[,,] intrinsics;
 
+    public SplatAnimator animator;
+
+
     // -----------------------------
     // INIT
     // -----------------------------
     public void InitializeCameras()
     {
-        string extrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Extrinsics.npy");
-        string intrinsicsPath = Path.Combine(FileSelector.datasetRoot, "Intrinsics.npy");
+        string frameFolder = FileSelector.frameFolders[animator.currentFrame];
+
+        string extrinsicsPath = Path.Combine(frameFolder, "extrinsics.npy");
+        string intrinsicsPath = Path.Combine(frameFolder, "intrinsics.npy");
 
         extrinsics = NpyLoader.LoadFloat32_3D(extrinsicsPath);
         intrinsics = NpyLoader.LoadFloat32_3D(intrinsicsPath);

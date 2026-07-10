@@ -10,6 +10,7 @@ public class FileSelector : MonoBehaviour
     public SplatAnimator animator;
 
     public static string datasetRoot;
+    public static string[] frameFolders;
 
     public void SelectDataset()
     {
@@ -24,23 +25,29 @@ public class FileSelector : MonoBehaviour
 
         datasetRoot = paths[0];
 
-        string camerasPath = Path.Combine(datasetRoot, "Cameras");
 
-        if (!Directory.Exists(camerasPath))
+        frameFolders = Directory.GetDirectories(datasetRoot)
+        .OrderBy(f => f)
+        .ToArray();
+
+        if (frameFolders.Length == 0)
         {
-            Debug.LogError("No Cameras folder found in dataset!");
+            Debug.LogError("No frame folders found!");
             return;
         }
 
-        // detect camera folders
+
+        string camerasPath = Path.Combine(frameFolders[0], "Cameras");
+
         string[] camFolders = Directory.GetDirectories(camerasPath)
             .OrderBy(f => f)
             .ToArray();
 
         animator.numCameras = camFolders.Length;
+        animator.frameCount = frameFolders.Length;
 
-        animator.colorFrames = new Texture2D[camFolders.Length][];
-        animator.depthFrames = new Texture2D[camFolders.Length][];
+        animator.colorFrames = new Texture2D[camFolders.Length];
+        animator.depthFrames = new Texture2D[camFolders.Length]; 
         animator.depthMaps = new RenderTexture[camFolders.Length];
 
         // ONLY LOAD DATA — DO NOT START PLAYBACK
@@ -55,8 +62,8 @@ public class FileSelector : MonoBehaviour
                 continue;
             }
 
-            animator.colorFrames[i] = LoadFolder(colourPath);
-            animator.depthFrames[i] = LoadFolder(depthPath);
+            animator.colorFrames[i] = LoadSingleImage(colourPath);
+            animator.depthFrames[i] = LoadSingleImage(depthPath);
         }
 
         Debug.Log("Dataset loaded. Ready to start animation.");
@@ -71,7 +78,7 @@ public class FileSelector : MonoBehaviour
             return;
         }
 
-        animator.InitializeScene();
+        animator.frameCount = frameFolders.Length;
         animator.StartPlayback();
 
         if (menu != null)
@@ -101,5 +108,24 @@ public class FileSelector : MonoBehaviour
         }
 
         return textures;
+    }
+
+    public static Texture2D LoadSingleImage(string folder)
+    {
+        string file = Directory.GetFiles(folder)
+            .FirstOrDefault(f =>
+                f.EndsWith(".png") ||
+                f.EndsWith(".jpg") ||
+                f.EndsWith(".jpeg"));
+
+        if (file == null)
+            return null;
+
+        byte[] bytes = File.ReadAllBytes(file);
+
+        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        tex.LoadImage(bytes);
+
+        return tex;
     }
 }

@@ -3,6 +3,7 @@
 #pragma kernel WriteDepth
 #pragma kernel ConvertDepth
 #pragma kernel ClearDepth
+//#pragma kernel UpdatePositions
 
 Texture2D<float4> _ColorTex;
 SamplerState sampler_ColorTex;
@@ -339,3 +340,22 @@ void ClearDepth(uint3 id : SV_DispatchThreadID)
 
     DepthTexture[id.xy] = 2147483647;
 }
+
+/*
+[numthreads(256, 1, 1)]
+void UpdateGaussianPositions(uint id : SV_DispatchThreadID)
+{
+    float da0 = DA3Frame0.Load(...);
+    float da1 = DA3FrameN.Load(...);
+
+    float delta = da1 - da0;
+
+    float metricDelta = ConvertToMetric(delta);
+
+    float3 ray = normalize(initialPosition - cameraPosition);
+
+    Positions[id] =
+initialPosition +
+ray * metricDelta;
+}
+*/

@@ -199,6 +199,26 @@ public class SplatData : ScriptableObject
 
     public void UpdateColorsOnly(Color[] c)
     {
+        if (_colorsA == null || _colorsA.count != c.Length)
+        {
+            Debug.Log($"Recreating color buffers. Old={_colorsA?.count} New={c.Length}");
+
+            _colorsA?.Dispose();
+            _colorsB?.Dispose();
+
+            _colorsA = new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                c.Length,
+                sizeof(float) * 4
+            );
+
+            _colorsB = new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                c.Length,
+                sizeof(float) * 4
+            );
+        }
+
         _colorsA.SetData(c);
         _colorsB.SetData(c);
     }
@@ -215,5 +235,10 @@ public class SplatData : ScriptableObject
         _contributionBuffer?.Dispose(); _contributionBuffer = null;
         _debugBuffer?.Dispose();
         _debugBuffer = null;
+        _finalColorBuffer?.Dispose();
+        _finalColorBuffer = null;
+
+        BestCameraScoreBuffer?.Dispose();
+        BestCameraScoreBuffer = null;
     }
 }
