@@ -3,7 +3,6 @@
 #pragma kernel WriteDepth
 #pragma kernel ConvertDepth
 #pragma kernel ClearDepth
-//#pragma kernel UpdatePositions
 
 Texture2D<float4> _ColorTex;
 SamplerState sampler_ColorTex;
@@ -246,7 +245,7 @@ void WriteDepth(uint id : SV_DispatchThreadID)
         }
     }
     */
-    const int radius = 8;
+    const int radius = 3;
 
     float centerDA3 = _DA3DepthTex.Load(
     int3(pixel, 0)
@@ -287,12 +286,15 @@ void WriteDepth(uint id : SV_DispatchThreadID)
           If the DA3 depth changes a lot,
           we are crossing an object boundary.
         */
+            
+            if (centerDA3 <= 0)
+                return;
 
             float boundaryDifference =
             abs(da3Depth - centerDA3);
 
 
-            if (boundaryDifference > 0.05)
+            if (boundaryDifference > 0.02)
             {
                 continue;
             }
@@ -340,22 +342,3 @@ void ClearDepth(uint3 id : SV_DispatchThreadID)
 
     DepthTexture[id.xy] = 2147483647;
 }
-
-/*
-[numthreads(256, 1, 1)]
-void UpdateGaussianPositions(uint id : SV_DispatchThreadID)
-{
-    float da0 = DA3Frame0.Load(...);
-    float da1 = DA3FrameN.Load(...);
-
-    float delta = da1 - da0;
-
-    float metricDelta = ConvertToMetric(delta);
-
-    float3 ray = normalize(initialPosition - cameraPosition);
-
-    Positions[id] =
-initialPosition +
-ray * metricDelta;
-}
-*/

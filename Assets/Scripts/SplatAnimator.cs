@@ -60,6 +60,12 @@ public class SplatAnimator : MonoBehaviour
 
     bool colourReady = false;
 
+    private Vector3[] referencePositions;
+    Vector3[] referenceDirections;
+    Quaternion referenceRotation;
+    Vector3 refCentroid;
+    Vector3 currentCentroid;
+
     public void RunGPUColouring(SplatData targetSplat)
     {
         int count = targetSplat.Count;
@@ -172,7 +178,7 @@ public class SplatAnimator : MonoBehaviour
             Vector4[] debug = new Vector4[3];
 
             targetSplat.DebugBuffer.GetData(debug);
-
+            /*
             Debug.Log(
                 $"Gaussian depth={debug[0].x}  depth map depth={debug[0].y}  difference={debug[0].z}  Score={debug[0].w}"
             );
@@ -188,9 +194,10 @@ public class SplatAnimator : MonoBehaviour
                 "Depth size: " + debug[2].x + "," + debug[2].y +
                 " Color size: " + debug[2].z + "," + debug[2].w
             );
+            */
         }
 
-
+            
         // finalize average colors
         int finalize = splatCompute.FindKernel("FinalizeColours");
 
@@ -646,7 +653,6 @@ public class SplatAnimator : MonoBehaviour
             }
         }
 
-        Debug.Log("Current frame: " + currentFrame);
         //if (loadingBar != null && colorFrames.Length > 0)
         //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
@@ -717,6 +723,120 @@ public class SplatAnimator : MonoBehaviour
         importer.ApplyCameras();
 
         SetCamPositions();
+
+
+        //get the camera transforms for frame 0
+        if (currentFrame == 0)
+        {
+            referencePositions = new Vector3[numCameras];
+            referenceDirections = new Vector3[numCameras];
+
+            for (int i = 0; i < numCameras; i++)
+            {
+                referencePositions[i] = renderCameras[i].transform.position;
+            }
+
+            //compute the center of the reference cameras
+            refCentroid = Vector3.zero;
+
+            for (int i = 0; i < numCameras; i++)
+            {
+                refCentroid += referencePositions[i];
+            }
+
+            //average the center positions
+            refCentroid /= numCameras;
+
+            //store camera directions relative to centroid
+            for (int i = 0; i < numCameras; i++)
+            {
+                referenceDirections[i] =
+                    (referencePositions[i] - refCentroid).normalized;
+            }
+        }
+
+        //compute the center of the current cameras
+        Vector3 currentCentroid = Vector3.zero;
+
+        for (int i = 0; i < numCameras; i++)
+        {
+            currentCentroid += renderCameras[i].transform.position;
+        }
+
+        //average the center positions
+        currentCentroid /= numCameras;
+
+        //-------------------------
+        // Rotation alignment
+        //-------------------------
+
+        Quaternion rotationOffset = Quaternion.identity;
+
+        Vector3 axis = Vector3.zero;
+
+        for (int i = 0; i < numCameras; i++)
+        {
+            Vector3 currentDirection =
+                (renderCameras[i].transform.position - currentCentroid).normalized;
+
+
+            Quaternion q =
+                Quaternion.FromToRotation(currentDirection, referenceDirections[i]);
+
+            rotationOffset = q * rotationOffset;
+        }
+
+
+        //average rotation contribution
+        rotationOffset = Quaternion.Slerp(
+            Quaternion.identity,
+            rotationOffset,
+            1f / numCameras
+        );
+
+        Debug.Log($"--- Frame {currentFrame} Camera Alignment ---");
+
+        for (int i = 0; i < numCameras; i++)
+        {
+            Vector3 posDifference = renderCameras[i].transform.position - referencePositions[i];
+
+            Debug.Log(
+                $"Camera {i}: " +
+                $"Current Pos {renderCameras[i].transform.position}, " +
+                $"Ref Pos {referencePositions[i]}, " +
+                $"Delta {posDifference}, " +
+                $"Rotation {renderCameras[i].transform.eulerAngles}"
+            );
+        }
+
+        float refDistance = Vector3.Distance(
+            referencePositions[0],
+            referencePositions[1]
+        );
+
+        float currentDistance = Vector3.Distance(
+            renderCameras[0].transform.position,
+            renderCameras[1].transform.position
+        );
+
+        Debug.Log($"Camera distance reference: {refDistance}, current: {currentDistance}");
+
+        Bounds bounds = new Bounds(Vector3.zero, Vector3.zero);
+
+        foreach (Vector3 p in NextSplat.Positions)
+        {
+            bounds.Encapsulate(p);
+        }
+
+        Debug.Log(
+            $"Frame {currentFrame} Center: {bounds.center}, Size: {bounds.size}");
+        //apply rotation
+        reconstructionRoot.rotation = Quaternion.Inverse(rotationOffset);
+
+        //apply the difference in position to the reconstruction root
+        Vector3 translation = refCentroid - currentCentroid;
+        reconstructionRoot.localPosition = translation;
+
     }
 
 
