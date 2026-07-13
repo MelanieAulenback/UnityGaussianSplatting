@@ -52,6 +52,5 @@ public class DepthDisplaySetup : MonoBehaviour
 
         */
 
-        Debug.Log("Depth texture assigned!");
     }
 }

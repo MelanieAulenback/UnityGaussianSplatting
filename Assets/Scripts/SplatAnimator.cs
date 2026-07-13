@@ -7,12 +7,14 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
+using static UnityEngine.Rendering.DebugUI.Table;
 
 public class SplatAnimator : MonoBehaviour
 {
     public DA3CameraImporter importer;
 
     public Transform reconstructionRoot;
+    private Transform splatRoot;
 
     [Header("GLB Root")]
     public GameObject glbRoot;
@@ -62,7 +64,7 @@ public class SplatAnimator : MonoBehaviour
 
     private Vector3[] referencePositions;
     Vector3[] referenceDirections;
-    Quaternion referenceRotation;
+    Quaternion[] referenceRotations;
     Vector3 refCentroid;
     Vector3 currentCentroid;
 
@@ -266,7 +268,6 @@ public class SplatAnimator : MonoBehaviour
     RenderTexture depthMinTexture,
     int cameraIndex)
     {
-        Debug.Log($"Generating depth for {cam.name}");
         int kernel = splatCompute.FindKernel("WriteDepth");
 
         splatCompute.SetTexture(
@@ -451,17 +452,15 @@ public class SplatAnimator : MonoBehaviour
 
             if (CameraMeshPose.TryGetPose(importer, i, mf, out Vector3 pos, out Quaternion rot))
             {
-                Debug.DrawRay(pos, rot * Vector3.forward * 0.2f, Color.blue, 100f);
-                Debug.DrawRay(pos, rot * Vector3.up * 0.2f, Color.green, 100f);
-                Debug.DrawRay(pos, rot * Vector3.right * 0.2f, Color.red, 100f);
+                //Debug.DrawRay(pos, rot * Vector3.forward * 0.2f, Color.blue, 100f);
+                //Debug.DrawRay(pos, rot * Vector3.up * 0.2f, Color.green, 100f);
+                //Debug.DrawRay(pos, rot * Vector3.right * 0.2f, Color.red, 100f);
 
             }
 
             //change just the position to the glb camera's position
             renderCameras[i].transform.position = pos;
             renderCameras[i].transform.rotation = rot;
-
-            renderCameras[i].aspect = (float)colorFrames[i].width / colorFrames[i].height;
         }
     }
     // -----------------------------------------------------
@@ -659,6 +658,8 @@ public class SplatAnimator : MonoBehaviour
 
     void LoadCurrentFrame()
     {
+        Debug.Log("Frame: " + currentFrame);
+
         string frameFolder = FileSelector.frameFolders[currentFrame];
 
         // ---------- Load GLB ----------
@@ -687,6 +688,10 @@ public class SplatAnimator : MonoBehaviour
 
         reconstructionRoot = glbRoot.transform;
 
+        reconstructionRoot.position = Vector3.zero;
+        reconstructionRoot.rotation = Quaternion.identity;
+        reconstructionRoot.localScale = Vector3.one;
+
         //----------------------------------------------------
         // Parse GLB
         //----------------------------------------------------
@@ -694,8 +699,6 @@ public class SplatAnimator : MonoBehaviour
         SetupGLBGeometry();
 
         AttachToRoot();
-
-        ApplyScale();
 
         //----------------------------------------------------
         // Load colour/depth images
@@ -724,16 +727,31 @@ public class SplatAnimator : MonoBehaviour
 
         SetCamPositions();
 
+        //set scaling object
+        //scale up whole splat
+        if (splatRoot == null)
+        {
+            GameObject root = new GameObject("SplatRoot");
+            splatRoot = root.transform;
+
+            splatRoot.position = Vector3.zero;
+            splatRoot.rotation = Quaternion.identity;
+            splatRoot.localScale = Vector3.one * targetSceneSize;
+        }
+
+        reconstructionRoot.SetParent(splatRoot, false);
 
         //get the camera transforms for frame 0
         if (currentFrame == 0)
         {
             referencePositions = new Vector3[numCameras];
             referenceDirections = new Vector3[numCameras];
+            referenceRotations = new Quaternion[numCameras];
 
             for (int i = 0; i < numCameras; i++)
             {
                 referencePositions[i] = renderCameras[i].transform.position;
+                referenceRotations[i] = renderCameras[i].transform.rotation;
             }
 
             //compute the center of the reference cameras
@@ -754,17 +772,23 @@ public class SplatAnimator : MonoBehaviour
                     (referencePositions[i] - refCentroid).normalized;
             }
         }
+        
+        //scale
+        //get the distance between first two cameras
 
-        //compute the center of the current cameras
-        Vector3 currentCentroid = Vector3.zero;
+        float currSize = Vector3.Distance(renderCameras[0].transform.position, renderCameras[1].transform.position);
+        float refSize = Vector3.Distance(referencePositions[0], referencePositions[1]);
 
-        for (int i = 0; i < numCameras; i++)
+        float sizeDif = refSize / currSize;
+
+        //apply scale
+        reconstructionRoot.localScale *= sizeDif;
+        
+        //get the distance from the first ref cam to the first current cam
+        if (currentFrame == 0)
         {
-            currentCentroid += renderCameras[i].transform.position;
+            referencePositions[0] = renderCameras[0].transform.position;
         }
-
-        //average the center positions
-        currentCentroid /= numCameras;
 
         //-------------------------
         // Rotation alignment
@@ -772,70 +796,85 @@ public class SplatAnimator : MonoBehaviour
 
         Quaternion rotationOffset = Quaternion.identity;
 
-        Vector3 axis = Vector3.zero;
+        Vector3 currentUp = Vector3.zero;
+        Vector3 referenceUp = Vector3.zero;
+
+        // accumulate camera directions
+        for (int i = 0; i < numCameras; i++)
+        {
+            currentUp += renderCameras[i].transform.up;
+            referenceUp += referenceRotations[i] * Vector3.up;
+        }
+
+        currentUp.Normalize();
+        referenceUp.Normalize();
+
+
+        // First align camera positions
+        Vector3 currentCenter = Vector3.zero;
+        Vector3 referenceCenter = Vector3.zero;
 
         for (int i = 0; i < numCameras; i++)
         {
-            Vector3 currentDirection =
-                (renderCameras[i].transform.position - currentCentroid).normalized;
-
-
-            Quaternion q =
-                Quaternion.FromToRotation(currentDirection, referenceDirections[i]);
-
-            rotationOffset = q * rotationOffset;
+            currentCenter += renderCameras[i].transform.position;
+            referenceCenter += referencePositions[i];
         }
 
+        currentCenter /= numCameras;
+        referenceCenter /= numCameras;
 
-        //average rotation contribution
-        rotationOffset = Quaternion.Slerp(
-            Quaternion.identity,
-            rotationOffset,
-            1f / numCameras
-        );
 
-        Debug.Log($"--- Frame {currentFrame} Camera Alignment ---");
+        Vector3 currentDirection =
+            (renderCameras[0].transform.position - currentCenter).normalized;
 
-        for (int i = 0; i < numCameras; i++)
+        Vector3 referenceDirection =
+            (referencePositions[0] - refCentroid).normalized;
+
+
+        // yaw alignment
+        Quaternion yaw =
+            Quaternion.FromToRotation(
+                currentDirection,
+                referenceDirection);
+
+
+        // fix roll using camera up vectors
+
+        Vector3 rotatedUp =
+            yaw * currentUp;
+
+
+        Quaternion roll =
+            Quaternion.FromToRotation(
+                rotatedUp,
+                referenceUp);
+
+
+        rotationOffset = roll * yaw;
+
+
+        // apply
+        reconstructionRoot.rotation =
+            rotationOffset * reconstructionRoot.rotation;
+
+        //get the distance from the first ref cam to the first current cam
+        if (currentFrame == 0)
         {
-            Vector3 posDifference = renderCameras[i].transform.position - referencePositions[i];
-
-            Debug.Log(
-                $"Camera {i}: " +
-                $"Current Pos {renderCameras[i].transform.position}, " +
-                $"Ref Pos {referencePositions[i]}, " +
-                $"Delta {posDifference}, " +
-                $"Rotation {renderCameras[i].transform.eulerAngles}"
-            );
+            referencePositions[0] = renderCameras[0].transform.position;
         }
-
-        float refDistance = Vector3.Distance(
-            referencePositions[0],
-            referencePositions[1]
-        );
-
-        float currentDistance = Vector3.Distance(
-            renderCameras[0].transform.position,
-            renderCameras[1].transform.position
-        );
-
-        Debug.Log($"Camera distance reference: {refDistance}, current: {currentDistance}");
-
-        Bounds bounds = new Bounds(Vector3.zero, Vector3.zero);
-
-        foreach (Vector3 p in NextSplat.Positions)
-        {
-            bounds.Encapsulate(p);
-        }
-
-        Debug.Log(
-            $"Frame {currentFrame} Center: {bounds.center}, Size: {bounds.size}");
-        //apply rotation
-        reconstructionRoot.rotation = Quaternion.Inverse(rotationOffset);
 
         //apply the difference in position to the reconstruction root
-        Vector3 translation = refCentroid - currentCentroid;
-        reconstructionRoot.localPosition = translation;
+        Vector3 delta = referencePositions[0] - renderCameras[0].transform.position;
+        reconstructionRoot.position += delta;
+
+        //reconstructionRoot.localScale *= targetSceneSize;
+        
+        for (int i = 0; i < numCameras; i++)
+        {
+            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.forward * 0.2f, Color.blue, 100f);
+            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.up * 0.2f, Color.green, 100f);
+            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.right * 0.2f, Color.red, 100f);
+        }
 
     }
 
@@ -888,8 +927,5 @@ public class SplatAnimator : MonoBehaviour
     {
         activeBuffer = 1 - activeBuffer;
 
-        Debug.Log(
-            "Swapped to buffer " + activeBuffer
-        );
     }
 }
