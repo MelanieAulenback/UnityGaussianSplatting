@@ -16,8 +16,8 @@ public class SplatAnimator : MonoBehaviour
 {
     public DA3CameraImporter importer;
 
-    private Transform splatRoot;
-    private Transform camRoot;
+    public Transform splatRoot;
+    public Transform reconstructionRoot;
 
     [Header("GLB Root")]
     public GameObject glbRoot;
@@ -61,6 +61,7 @@ public class SplatAnimator : MonoBehaviour
 
     public float targetSceneSize = 10f;
     float currentScale = 1.0f;
+    float gaussianSize;
 
     public DepthDisplaySetup depthDisplay;
 
@@ -73,7 +74,12 @@ public class SplatAnimator : MonoBehaviour
     Vector3 currentCentroid;
 
     private Matrix4x4 currentFrameAlignment = Matrix4x4.identity;
+    private Matrix4x4 reconstructionMatrix = Matrix4x4.identity;
 
+    private void Start()
+    {
+        gaussianSize = 0.01f / targetSceneSize;
+    }
     public void RunGPUColouring(SplatData targetSplat)
     {
         int count = targetSplat.Count;
@@ -532,23 +538,70 @@ public class SplatAnimator : MonoBehaviour
         */
     }
 
+    void ApplyCameraTransform()
+    {
+        for (int i = 0; i < numCameras; i++)
+        {
+            Vector3 oldPos =
+                renderCameras[i].transform.position;
+
+
+            Quaternion oldRot =
+                renderCameras[i].transform.rotation;
+
+
+            Vector3 newPos =
+                reconstructionMatrix.MultiplyPoint3x4(
+                    renderCameras[i].transform.position);
+
+            Vector3 forward =
+                reconstructionMatrix
+                .MultiplyVector(
+                    oldRot * Vector3.forward);
+
+
+            Vector3 up =
+                reconstructionMatrix
+                .MultiplyVector(
+                    oldRot * Vector3.up);
+
+
+            renderCameras[i].transform.position =
+                newPos;
+
+
+            renderCameras[i].transform.rotation =
+                Quaternion.LookRotation(
+                    forward,
+                    up);
+        }
+    }
+
     // -----------------------------------------------------
     // 3. Attach everything to root
     // -----------------------------------------------------
     void AttachToRoot()
     {
-        /*
+        
         if (reconstructionRoot == null)
-            return;
+        {
+            GameObject reconstruction = new GameObject("ReconstructionRoot");
+            reconstructionRoot = reconstruction.transform;
+        }
 
+        /*
         if (pointCloud != null)
             pointCloud.transform.SetParent(reconstructionRoot);
         
         foreach (var cam in glbCameras)
             cam.transform.SetParent(reconstructionRoot);
         */
+        splatRoot.SetParent(reconstructionRoot, false);
+
         foreach (var cam in renderCameras)
-            cam.transform.SetParent(splatRoot, false);
+            cam.transform.SetParent(reconstructionRoot, false);
+
+        reconstructionRoot.localScale = Vector3.one * targetSceneSize;
     }
 
     // =====================================================
@@ -572,7 +625,7 @@ public class SplatAnimator : MonoBehaviour
         }
 
 
-        NextSplat.GaussiansFromCloud(pointCloud, 0.01f, targetSceneSize);
+        NextSplat.GaussiansFromCloud(pointCloud, gaussianSize);
 
         // Generate Gaussian depth maps
         for (int i = 0; i < numCameras; i++)
@@ -733,11 +786,6 @@ public class SplatAnimator : MonoBehaviour
 
         sw.Restart();
 
-        if (splatRoot == null)
-        {
-            GameObject root = new GameObject("SplatRoot");
-            splatRoot = root.transform;
-        }
         /*
         if (camRoot == null)
         {
@@ -753,7 +801,7 @@ public class SplatAnimator : MonoBehaviour
         camRoot.rotation = Quaternion.identity; 
         camRoot.localScale = Vector3.one;
         */
-        AttachToRoot();
+        //AttachToRoot();
 
         UnityEngine.Debug.Log($"AttachToRoot: {sw.ElapsedMilliseconds} ms");
 
@@ -799,7 +847,6 @@ public class SplatAnimator : MonoBehaviour
         if (currentFrame == 0)
         {
             referencePositions = new Vector3[numCameras];
-            referenceDirections = new Vector3[numCameras];
             referenceRotations = new Quaternion[numCameras];
 
             for (int i = 0; i < numCameras; i++)
@@ -808,23 +855,12 @@ public class SplatAnimator : MonoBehaviour
                 referenceRotations[i] = renderCameras[i].transform.rotation;
             }
 
-            //compute the center of the reference cameras
             refCentroid = Vector3.zero;
 
             for (int i = 0; i < numCameras; i++)
-            {
                 refCentroid += referencePositions[i];
-            }
 
-            //average the center positions
             refCentroid /= numCameras;
-
-            //store camera directions relative to centroid
-            for (int i = 0; i < numCameras; i++)
-            {
-                referenceDirections[i] =
-                    (referencePositions[i] - refCentroid).normalized;
-            }
         }
         
         //scale
@@ -834,15 +870,6 @@ public class SplatAnimator : MonoBehaviour
         float refSize = Vector3.Distance(referencePositions[0], referencePositions[1]);
 
         currentScale = refSize / currSize;
-
-        //apply scale
-        splatRoot.localScale = Vector3.one * currentScale * targetSceneSize;
-
-        //get the distance from the first ref cam to the first current cam
-        if (currentFrame == 0)
-        {
-            referencePositions[0] = renderCameras[0].transform.position;
-        }
 
         //-------------------------
         // Rotation alignment
@@ -906,20 +933,44 @@ public class SplatAnimator : MonoBehaviour
 
         rotationOffset = roll * yaw;
 
-
-        // apply
-        splatRoot.rotation =
-            rotationOffset * splatRoot.rotation;
-
-        //get the distance from the first ref cam to the first current cam
-        if (currentFrame == 0)
-        {
-            referencePositions[0] = renderCameras[0].transform.position;
-        }
+        Matrix4x4 temp =
+    Matrix4x4.Rotate(rotationOffset) *
+    Matrix4x4.Scale(Vector3.one * currentScale);
 
         //apply the difference in position to the reconstruction root
-        Vector3 delta = referencePositions[0] - renderCameras[0].transform.position;
-        splatRoot.position = delta;
+        Vector3 transformedCamera0 =
+            temp.MultiplyPoint3x4(
+                renderCameras[0].transform.position);
+
+        Vector3 delta =
+            referencePositions[0] -
+            transformedCamera0;
+
+        Matrix4x4 scaleMatrix =
+    Matrix4x4.Scale(
+        Vector3.one *
+        currentScale);
+
+
+        Matrix4x4 rotationMatrix =
+            Matrix4x4.Rotate(
+                rotationOffset);
+
+
+        Matrix4x4 translationMatrix =
+            Matrix4x4.Translate(
+                delta);
+
+        
+        reconstructionMatrix =
+        Matrix4x4.Translate(delta)
+        * temp;
+
+        ApplyCameraTransform();
+
+        AttachToRoot();
+
+        
 
         /*
         camRoot.position = delta; 
@@ -927,14 +978,14 @@ public class SplatAnimator : MonoBehaviour
         camRoot.localScale = Vector3.one;
         */
         //reconstructionRoot.localScale *= targetSceneSize;
-
+        /*
         for (int i = 0; i < numCameras; i++)
         {
             UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.forward * 0.2f, Color.blue, 100f);
             UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.up * 0.2f, Color.green, 100f);
             UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.right * 0.2f, Color.red, 100f);
         }
-        
+        */
         UnityEngine.Debug.Log($"Alignment: {sw.ElapsedMilliseconds} ms");
     }
 
@@ -950,14 +1001,15 @@ public class SplatAnimator : MonoBehaviour
         LoadCurrentFrame();
 
         Vector3[] alignedPoints = new Vector3[pointCloud.Length];
-        Matrix4x4 transform = splatRoot.localToWorldMatrix;
 
         for (int i = 0; i < pointCloud.Length; i++)
         {
-            alignedPoints[i] = transform.MultiplyPoint3x4(pointCloud[i]);
+            alignedPoints[i] =
+                    reconstructionMatrix.MultiplyPoint3x4(
+                        pointCloud[i]);
         }
 
-        NextSplat.GaussiansFromCloud(alignedPoints, 0.01f, targetSceneSize);
+        NextSplat.GaussiansFromCloud(alignedPoints, gaussianSize);
 
         for (int i = 0; i < numCameras; i++)
         {

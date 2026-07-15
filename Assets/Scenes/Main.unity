@@ -1359,6 +1359,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   importer: {fileID: 1285201270}
+  splatRoot: {fileID: 916050668}
   glbRoot: {fileID: 0}
   pointCloud:
   - {x: 1.7104247e+37, y: 5.37e-43, z: 1.7104298e+37}
@@ -1458,7 +1459,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 270950
+      - m_Value: 270951
         m_Name: Count
         m_Overridden: 1
     m_Int:

@@ -62,8 +62,7 @@ public class SplatData : ScriptableObject
 
     public void GaussiansFromCloud(
     Vector3[] verts,
-    float gaussianSize,
-    float scale)
+    float gaussianSize)
     {
         Dispose();
 
