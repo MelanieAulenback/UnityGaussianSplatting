@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -172,11 +173,6 @@ public class SplatAnimator : MonoBehaviour
                 kernel,
                 "_DepthTex",
                  depthMaps[cam]
-            );
-
-            splatCompute.SetMatrix(
-                "_WorldToCamera",
-                renderCameras[cam].worldToCameraMatrix
             );
 
             int groups = Mathf.CeilToInt(count / 256f);
@@ -403,50 +399,6 @@ public class SplatAnimator : MonoBehaviour
         }
     }
 
-    void SetupGLBGeometry()
-    {
-        /*
-        if (glbRoot == null)
-        {
-            UnityEngine.Debug.LogError("GLB Root not assigned!");
-            return;
-        }
-
-        List<Transform> geometries = new List<Transform>();
-
-        foreach (Transform child in glbRoot.transform)
-        {
-            if (child.name.StartsWith("geometry_"))
-                geometries.Add(child);
-        }
-
-        geometries = geometries
-            .OrderBy(g => g.name)
-            .ToList();
-
-        if (geometries.Count == 0)
-        {
-            UnityEngine.Debug.LogError("No geometry_* found in GLB!");
-            return;
-        }
-
-        // geometry_0 = point cloud
-        pointCloud = geometries[0].gameObject;
-
-        // geometry_1+ = camera anchors
-        glbCameras = geometries.Skip(1).Select(g => g.gameObject).ToArray();
-
-        //Debug.Log($"GLB parsed: 1 pointcloud + {glbCameras.Length} cameras");
-        
-        Vector3[] points =
-    LoadVertices(Path.Combine(FileSelector.frameFolders[currentFrame], "points.bin"));
-
-        Vector3[][] cameras =
-            LoadCameraVertices(Path.Combine(FileSelector.frameFolders[currentFrame], "cameras.bin"));
-        */
-        }
-
-
     // -----------------------------------------------------
     // 2. Create Unity cameras from dataset count
     // -----------------------------------------------------
@@ -506,36 +458,6 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[i].transform.rotation = rot;
             }
         }
-
-        /*
-        for (int i = 0;i < renderCameras.Length;i++)
-        {
-            GameObject glbCam = glbCameras[i];
-            Mesh mesh = glbCam.GetComponent<MeshFilter>().sharedMesh;
-            MeshFilter mf = glbCam.GetComponent<MeshFilter>();
-            Transform t = glbCam.transform;
-
-            /*
-            for (int j = 0; j < mesh.vertexCount; j++)
-            {
-                Debug.Log($"cam{i} vertex {j}: {mesh.vertices[j]}");
-                Debug.Log($"cam{i} vertex {j} world space: {t.TransformPoint(mesh.vertices[j])}");
-            }
-            
-
-            if (CameraMeshPose.TryGetPose(importer, i, mf, out Vector3 pos, out Quaternion rot))
-            {
-                //Debug.DrawRay(pos, rot * Vector3.forward * 0.2f, Color.blue, 100f);
-                //Debug.DrawRay(pos, rot * Vector3.up * 0.2f, Color.green, 100f);
-                //Debug.DrawRay(pos, rot * Vector3.right * 0.2f, Color.red, 100f);
-
-            }
-
-            //change just the position to the glb camera's position
-            renderCameras[i].transform.position = pos;
-            renderCameras[i].transform.rotation = rot;
-        }
-        */
     }
 
     void ApplyCameraTransform()
@@ -589,13 +511,6 @@ public class SplatAnimator : MonoBehaviour
             reconstructionRoot = reconstruction.transform;
         }
 
-        /*
-        if (pointCloud != null)
-            pointCloud.transform.SetParent(reconstructionRoot);
-        
-        foreach (var cam in glbCameras)
-            cam.transform.SetParent(reconstructionRoot);
-        */
         splatRoot.SetParent(reconstructionRoot, false);
 
         foreach (var cam in renderCameras)
@@ -755,9 +670,6 @@ public class SplatAnimator : MonoBehaviour
                 }
             }
         }
-
-        //if (loadingBar != null && colorFrames.Length > 0)
-        //   loadingBar.value = (float)currentFrame / colorFrames[0].Length;
     }
 
     void LoadCurrentFrame()
@@ -780,28 +692,13 @@ public class SplatAnimator : MonoBehaviour
         // Parse GLB
         //----------------------------------------------------
 
-        //SetupGLBGeometry();
-
         UnityEngine.Debug.Log($"load camera vertices: {sw.ElapsedMilliseconds} ms");
 
         sw.Restart();
 
-        /*
-        if (camRoot == null)
-        {
-            GameObject root = new GameObject("CamRoot");
-            camRoot = root.transform;
-        }
-        */
         splatRoot.position = Vector3.zero;
         splatRoot.rotation = Quaternion.identity;
         splatRoot.localScale = Vector3.one;
-        /*
-        camRoot.position = Vector3.zero; 
-        camRoot.rotation = Quaternion.identity; 
-        camRoot.localScale = Vector3.one;
-        */
-        //AttachToRoot();
 
         UnityEngine.Debug.Log($"AttachToRoot: {sw.ElapsedMilliseconds} ms");
 
@@ -875,35 +772,21 @@ public class SplatAnimator : MonoBehaviour
         // Rotation alignment
         //-------------------------
 
-        Quaternion rotationOffset = Quaternion.identity;
-
         Vector3 currentUp = Vector3.zero;
         Vector3 referenceUp = Vector3.zero;
+        Vector3 currentCenter = Vector3.zero;
 
         // accumulate camera directions
         for (int i = 0; i < numCameras; i++)
         {
             currentUp += renderCameras[i].transform.up;
             referenceUp += referenceRotations[i] * Vector3.up;
+            currentCenter += renderCameras[i].transform.position;
         }
 
         currentUp.Normalize();
         referenceUp.Normalize();
-
-
-        // First align camera positions
-        Vector3 currentCenter = Vector3.zero;
-        Vector3 referenceCenter = Vector3.zero;
-
-        for (int i = 0; i < numCameras; i++)
-        {
-            currentCenter += renderCameras[i].transform.position;
-            referenceCenter += referencePositions[i];
-        }
-
         currentCenter /= numCameras;
-        referenceCenter /= numCameras;
-
 
         Vector3 currentDirection =
             (renderCameras[0].transform.position - currentCenter).normalized;
@@ -931,53 +814,30 @@ public class SplatAnimator : MonoBehaviour
                 referenceUp);
 
 
-        rotationOffset = roll * yaw;
+        Quaternion rotationOffset = roll * yaw;
 
-        Matrix4x4 temp =
-    Matrix4x4.Rotate(rotationOffset) *
-    Matrix4x4.Scale(Vector3.one * currentScale);
+        Matrix4x4 scaleMatrix = Matrix4x4.Scale(Vector3.one * currentScale);
+        Matrix4x4 rotationMatrix = Matrix4x4.Rotate(rotationOffset);
 
-        //apply the difference in position to the reconstruction root
+        // temp is only needed for computing delta
+        Matrix4x4 rotationScale = rotationMatrix * scaleMatrix;
+
         Vector3 transformedCamera0 =
-            temp.MultiplyPoint3x4(
-                renderCameras[0].transform.position);
+            rotationScale.MultiplyPoint3x4(renderCameras[0].transform.position);
 
         Vector3 delta =
-            referencePositions[0] -
-            transformedCamera0;
+            referencePositions[0] - transformedCamera0;
 
-        Matrix4x4 scaleMatrix =
-    Matrix4x4.Scale(
-        Vector3.one *
-        currentScale);
+        Matrix4x4 translationMatrix = Matrix4x4.Translate(delta);
 
-
-        Matrix4x4 rotationMatrix =
-            Matrix4x4.Rotate(
-                rotationOffset);
-
-
-        Matrix4x4 translationMatrix =
-            Matrix4x4.Translate(
-                delta);
-
-        
         reconstructionMatrix =
-        Matrix4x4.Translate(delta)
-        * temp;
+            translationMatrix *
+            rotationScale;
 
         ApplyCameraTransform();
 
         AttachToRoot();
 
-        
-
-        /*
-        camRoot.position = delta; 
-        camRoot.rotation = rotationOffset; 
-        camRoot.localScale = Vector3.one;
-        */
-        //reconstructionRoot.localScale *= targetSceneSize;
         /*
         for (int i = 0; i < numCameras; i++)
         {

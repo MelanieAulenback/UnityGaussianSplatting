@@ -1360,6 +1360,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   importer: {fileID: 1285201270}
   splatRoot: {fileID: 916050668}
+  reconstructionRoot: {fileID: 0}
   glbRoot: {fileID: 0}
   pointCloud:
   - {x: 1.7104247e+37, y: 5.37e-43, z: 1.7104298e+37}
