@@ -61,8 +61,9 @@ public class SplatData : ScriptableObject
     public int Count => Positions != null ? Positions.Length : 0;
 
     public void GaussiansFromCloud(
-    GameObject pointCloud,
-    float gaussianSize)
+    Vector3[] verts,
+    float gaussianSize,
+    float scale)
     {
         Dispose();
 
@@ -72,10 +73,10 @@ public class SplatData : ScriptableObject
         //var axes = new List<Vector3>();
 
         // get mesh
-        Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
-        Transform t = pointCloud.transform;
+        //Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
+        //Transform t = pointCloud.transform;
 
-        Vector3[] verts = mesh.vertices;
+        //Vector3[] verts = mesh.vertices;
 
         Positions = new Vector3[verts.Length];
         Colors = new Color[verts.Length];
@@ -84,9 +85,9 @@ public class SplatData : ScriptableObject
         // loop vertices
         for (int i = 0; i < verts.Length; i++)
         {
-            Positions[i] = t.TransformPoint(verts[i]);
+            Positions[i] = verts[i];
 
-            
+
             // Placeholder. Compute shader overwrites these.
             Colors[i] = Color.black;
 
@@ -111,7 +112,7 @@ public class SplatData : ScriptableObject
 
         InitializeBuffers();
 
-        Debug.Log($"Generated {Positions.Length} gaussians (weighted splat).");
+        //Debug.Log($"Generated {Positions.Length} gaussians (weighted splat).");
     }
 
     

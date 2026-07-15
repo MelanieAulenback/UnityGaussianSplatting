@@ -4,21 +4,20 @@ using UnityEngine;
 public static class CameraMeshPose
 {
     public static bool TryGetPose(
-        DA3CameraImporter importer,
-        int camNum,
-        MeshFilter mf,
-        out Vector3 position,
-        out Quaternion rotation)
+    Vector3[] verts,
+    out Vector3 position,
+    out Quaternion rotation)
     {
         position = Vector3.zero;
         rotation = Quaternion.identity;
 
+        /*
         if (mf == null || mf.sharedMesh == null)
             return false;
 
         Transform t = mf.transform;
         Vector3[] verts = mf.sharedMesh.vertices;
-
+        */
         //--------------------------------------------------
         // Build unique vertex set
         //--------------------------------------------------
@@ -28,7 +27,8 @@ public static class CameraMeshPose
 
         foreach (Vector3 v in verts)
         {
-            Vector3 w = t.TransformPoint(v);
+            //Vector3 w = t.TransformPoint(v);
+            Vector3 w = v;
 
             bool exists = false;
             foreach (Vector3 u in unique)

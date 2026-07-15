@@ -17,8 +17,8 @@ public static class NpyLoader
             // -------------------------
             byte[] magic = br.ReadBytes(6);
 
-            Debug.Log("Loading file: " + path);
-            Debug.Log("Exists: " + File.Exists(path));
+            //Debug.Log("Loading file: " + path);
+            //Debug.Log("Exists: " + File.Exists(path));
 
             // safer binary check (NO string conversion)
             if (magic[0] != 0x93 || magic[1] != (byte)'N')

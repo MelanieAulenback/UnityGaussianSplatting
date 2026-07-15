@@ -1,7 +1,10 @@
 ﻿using Siccity.GLTFUtility;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -13,16 +16,16 @@ public class SplatAnimator : MonoBehaviour
 {
     public DA3CameraImporter importer;
 
-    public Transform reconstructionRoot;
     private Transform splatRoot;
+    private Transform camRoot;
 
     [Header("GLB Root")]
     public GameObject glbRoot;
 
     [Header("Runtime")]
-    public GameObject pointCloud;
+    public Vector3[] pointCloud;
     public Camera[] renderCameras;
-    public GameObject[] glbCameras;
+    public Vector3[][] glbCameras;
 
     public RenderTexture[] depthMaps;
     public RenderTexture[] depthMinMaps;
@@ -57,6 +60,7 @@ public class SplatAnimator : MonoBehaviour
     bool callNextFrame  = false;
 
     public float targetSceneSize = 10f;
+    float currentScale = 1.0f;
 
     public DepthDisplaySetup depthDisplay;
 
@@ -67,6 +71,8 @@ public class SplatAnimator : MonoBehaviour
     Quaternion[] referenceRotations;
     Vector3 refCentroid;
     Vector3 currentCentroid;
+
+    private Matrix4x4 currentFrameAlignment = Matrix4x4.identity;
 
     public void RunGPUColouring(SplatData targetSplat)
     {
@@ -167,7 +173,6 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[cam].worldToCameraMatrix
             );
 
-
             int groups = Mathf.CeilToInt(count / 256f);
 
             splatCompute.Dispatch(
@@ -180,23 +185,7 @@ public class SplatAnimator : MonoBehaviour
             Vector4[] debug = new Vector4[3];
 
             targetSplat.DebugBuffer.GetData(debug);
-            /*
-            Debug.Log(
-                $"Gaussian depth={debug[0].x}  depth map depth={debug[0].y}  difference={debug[0].z}  Score={debug[0].w}"
-            );
 
-            Debug.Log(
-                "UV: " + debug[1].x +
-                ", " + debug[1].y +
-                " Pixel: " + debug[1].z +
-                ", " + debug[1].w
-            );
-
-            Debug.Log(
-                "Depth size: " + debug[2].x + "," + debug[2].y +
-                " Color size: " + debug[2].z + "," + debug[2].w
-            );
-            */
         }
 
             
@@ -240,7 +229,7 @@ public class SplatAnimator : MonoBehaviour
         {
             if (request.hasError)
             {
-                Debug.LogError("Colour readback failed");
+                UnityEngine.Debug.LogError("Colour readback failed");
                 return;
             }
 
@@ -333,7 +322,6 @@ public class SplatAnimator : MonoBehaviour
             1
         );
     }
-
     // =====================================================
     // INIT FROM GLB + DATASET
     // =====================================================
@@ -349,11 +337,72 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     // 1. GLB parsing: geometry_0 = splats, geometry_1+ = cameras
     // -----------------------------------------------------
+    public static Vector3[] LoadVertices(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+
+        // Read vertex count
+        byte[] countBytes = new byte[4];
+        stream.Read(countBytes, 0, 4);
+
+        int count = System.BitConverter.ToInt32(countBytes, 0);
+
+        // Allocate output array
+        Vector3[] verts = new Vector3[count];
+
+        // Read directly into the Vector3 array's memory
+        Span<byte> vertexBytes = MemoryMarshal.AsBytes(verts.AsSpan());
+
+        int totalRead = 0;
+
+        while (totalRead < vertexBytes.Length)
+        {
+            int bytesRead = stream.Read(vertexBytes.Slice(totalRead));
+
+            if (bytesRead == 0)
+                throw new EndOfStreamException();
+
+            totalRead += bytesRead;
+        }
+
+        return verts;
+    }
+
+    public static Vector3[][] LoadCameraVertices(string path)
+    {
+        using (BinaryReader reader =
+            new BinaryReader(File.OpenRead(path)))
+        {
+            int cameraCount = reader.ReadInt32();
+
+            Vector3[][] cameras =
+                new Vector3[cameraCount][];
+
+            for (int c = 0; c < cameraCount; c++)
+            {
+                int vertexCount = reader.ReadInt32();
+
+                cameras[c] = new Vector3[vertexCount];
+
+                for (int i = 0; i < vertexCount; i++)
+                {
+                    cameras[c][i] = new Vector3(
+                        reader.ReadSingle(),
+                        reader.ReadSingle(),
+                        reader.ReadSingle());
+                }
+            }
+
+            return cameras;
+        }
+    }
+
     void SetupGLBGeometry()
     {
+        /*
         if (glbRoot == null)
         {
-            Debug.LogError("GLB Root not assigned!");
+            UnityEngine.Debug.LogError("GLB Root not assigned!");
             return;
         }
 
@@ -371,7 +420,7 @@ public class SplatAnimator : MonoBehaviour
 
         if (geometries.Count == 0)
         {
-            Debug.LogError("No geometry_* found in GLB!");
+            UnityEngine.Debug.LogError("No geometry_* found in GLB!");
             return;
         }
 
@@ -381,9 +430,15 @@ public class SplatAnimator : MonoBehaviour
         // geometry_1+ = camera anchors
         glbCameras = geometries.Skip(1).Select(g => g.gameObject).ToArray();
 
-        Debug.Log($"GLB parsed: 1 pointcloud + {glbCameras.Length} cameras");
+        //Debug.Log($"GLB parsed: 1 pointcloud + {glbCameras.Length} cameras");
         
-    }
+        Vector3[] points =
+    LoadVertices(Path.Combine(FileSelector.frameFolders[currentFrame], "points.bin"));
+
+        Vector3[][] cameras =
+            LoadCameraVertices(Path.Combine(FileSelector.frameFolders[currentFrame], "cameras.bin"));
+        */
+        }
 
 
     // -----------------------------------------------------
@@ -428,13 +483,25 @@ public class SplatAnimator : MonoBehaviour
             depthMinMaps[i].Create();
         }
 
-        Debug.Log($"Created {numCameras} Unity cameras");
+        //Debug.Log($"Created {numCameras} Unity cameras");
 
     }
 
-    public void SetCamPositions()
+    public void SetCamPositions(Vector3[][] cameraVertices)
     {
-        
+        for (int i = 0; i < renderCameras.Length; i++)
+        {
+            if (CameraMeshPose.TryGetPose(
+                    cameraVertices[i],
+                    out Vector3 pos,
+                    out Quaternion rot))
+            {
+                renderCameras[i].transform.position = pos;
+                renderCameras[i].transform.rotation = rot;
+            }
+        }
+
+        /*
         for (int i = 0;i < renderCameras.Length;i++)
         {
             GameObject glbCam = glbCameras[i];
@@ -448,7 +515,7 @@ public class SplatAnimator : MonoBehaviour
                 Debug.Log($"cam{i} vertex {j}: {mesh.vertices[j]}");
                 Debug.Log($"cam{i} vertex {j} world space: {t.TransformPoint(mesh.vertices[j])}");
             }
-            */
+            
 
             if (CameraMeshPose.TryGetPose(importer, i, mf, out Vector3 pos, out Quaternion rot))
             {
@@ -462,23 +529,26 @@ public class SplatAnimator : MonoBehaviour
             renderCameras[i].transform.position = pos;
             renderCameras[i].transform.rotation = rot;
         }
+        */
     }
+
     // -----------------------------------------------------
     // 3. Attach everything to root
     // -----------------------------------------------------
     void AttachToRoot()
     {
+        /*
         if (reconstructionRoot == null)
             return;
 
         if (pointCloud != null)
             pointCloud.transform.SetParent(reconstructionRoot);
-
+        
         foreach (var cam in glbCameras)
             cam.transform.SetParent(reconstructionRoot);
-
+        */
         foreach (var cam in renderCameras)
-            cam.transform.SetParent(reconstructionRoot);
+            cam.transform.SetParent(splatRoot, false);
     }
 
     // =====================================================
@@ -491,18 +561,18 @@ public class SplatAnimator : MonoBehaviour
 
         if (renderCameras == null || renderCameras.Length == 0)
         {
-            Debug.LogError("renderCameras not initialized. Did you call InitializeScene()?");
+            UnityEngine.Debug.LogError("renderCameras not initialized. Did you call InitializeScene()?");
             return;
         }
 
         if (colorFrames == null || colorFrames.Length == 0)
         {
-            Debug.LogError("Frames not loaded.");
+            UnityEngine.Debug.LogError("Frames not loaded.");
             return;
         }
 
 
-        NextSplat.GaussiansFromCloud(pointCloud, 0.01f);
+        NextSplat.GaussiansFromCloud(pointCloud, 0.01f, targetSceneSize);
 
         // Generate Gaussian depth maps
         for (int i = 0; i < numCameras; i++)
@@ -531,27 +601,8 @@ public class SplatAnimator : MonoBehaviour
         RunGPUColouring(NextSplat);
 
         callNextFrame = true;
-
-
     }
 
-    // =====================================================
-    // SCALE
-    // =====================================================
-    void ApplyScale()
-    {
-        Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
-
-        Bounds b = mesh.bounds;
-        float maxExtent = Mathf.Max(b.size.x, b.size.y, b.size.z);
-
-        float scale = targetSceneSize / maxExtent;
-
-        reconstructionRoot.localScale = Vector3.one * scale;
-
-        Debug.Log(reconstructionRoot.lossyScale);
-        Debug.Log(reconstructionRoot.localScale);
-    }
 
     void ClearDepthMin(RenderTexture depthTexture)
     {
@@ -658,47 +709,55 @@ public class SplatAnimator : MonoBehaviour
 
     void LoadCurrentFrame()
     {
-        Debug.Log("Frame: " + currentFrame);
+        //Debug.Log("Frame: " + currentFrame);
 
         string frameFolder = FileSelector.frameFolders[currentFrame];
 
-        // ---------- Load GLB ----------
-        string glbPath = Directory.GetFiles(frameFolder, "*.glb")
-            .FirstOrDefault();
+        Stopwatch sw = Stopwatch.StartNew();
 
-        if (glbPath == null)
-        {
-            Debug.LogError($"No GLB found in {frameFolder}");
-            return;
-        }
+        pointCloud = LoadVertices(Path.Combine(frameFolder, "points.bin"));
 
-        // Destroy previous reconstruction
-        if (glbRoot != null)
-        {
-            Destroy(glbRoot);
-        }
+        UnityEngine.Debug.Log($"Load point cloud vertices: {sw.ElapsedMilliseconds} ms");
+        sw.Restart();
 
-        glbRoot = Importer.LoadFromFile(glbPath);
-
-        if (glbRoot == null)
-        {
-            Debug.LogError("Failed to import GLB.");
-            return;
-        }
-
-        reconstructionRoot = glbRoot.transform;
-
-        reconstructionRoot.position = Vector3.zero;
-        reconstructionRoot.rotation = Quaternion.identity;
-        reconstructionRoot.localScale = Vector3.one;
+        glbCameras =
+            LoadCameraVertices(Path.Combine(frameFolder, "cameras.bin"));
 
         //----------------------------------------------------
         // Parse GLB
         //----------------------------------------------------
 
-        SetupGLBGeometry();
+        //SetupGLBGeometry();
 
+        UnityEngine.Debug.Log($"load camera vertices: {sw.ElapsedMilliseconds} ms");
+
+        sw.Restart();
+
+        if (splatRoot == null)
+        {
+            GameObject root = new GameObject("SplatRoot");
+            splatRoot = root.transform;
+        }
+        /*
+        if (camRoot == null)
+        {
+            GameObject root = new GameObject("CamRoot");
+            camRoot = root.transform;
+        }
+        */
+        splatRoot.position = Vector3.zero;
+        splatRoot.rotation = Quaternion.identity;
+        splatRoot.localScale = Vector3.one;
+        /*
+        camRoot.position = Vector3.zero; 
+        camRoot.rotation = Quaternion.identity; 
+        camRoot.localScale = Vector3.one;
+        */
         AttachToRoot();
+
+        UnityEngine.Debug.Log($"AttachToRoot: {sw.ElapsedMilliseconds} ms");
+
+        sw.Restart();
 
         //----------------------------------------------------
         // Load colour/depth images
@@ -719,27 +778,22 @@ public class SplatAnimator : MonoBehaviour
             depthFrames[cam] = FileSelector.LoadSingleImage(depthFolder);
         }
 
+        UnityEngine.Debug.Log($"Image loading: {sw.ElapsedMilliseconds} ms");
+
+        sw.Restart();
+
         //----------------------------------------------------
         // Update camera poses
         //----------------------------------------------------
 
         importer.ApplyCameras();
 
-        SetCamPositions();
+        SetCamPositions(glbCameras);
 
-        //set scaling object
-        //scale up whole splat
-        if (splatRoot == null)
-        {
-            GameObject root = new GameObject("SplatRoot");
-            splatRoot = root.transform;
+        UnityEngine.Debug.Log($"Camera setup: {sw.ElapsedMilliseconds} ms");
 
-            splatRoot.position = Vector3.zero;
-            splatRoot.rotation = Quaternion.identity;
-            splatRoot.localScale = Vector3.one * targetSceneSize;
-        }
+        sw.Restart();
 
-        reconstructionRoot.SetParent(splatRoot, false);
 
         //get the camera transforms for frame 0
         if (currentFrame == 0)
@@ -779,11 +833,11 @@ public class SplatAnimator : MonoBehaviour
         float currSize = Vector3.Distance(renderCameras[0].transform.position, renderCameras[1].transform.position);
         float refSize = Vector3.Distance(referencePositions[0], referencePositions[1]);
 
-        float sizeDif = refSize / currSize;
+        currentScale = refSize / currSize;
 
         //apply scale
-        reconstructionRoot.localScale *= sizeDif;
-        
+        splatRoot.localScale = Vector3.one * currentScale * targetSceneSize;
+
         //get the distance from the first ref cam to the first current cam
         if (currentFrame == 0)
         {
@@ -854,8 +908,8 @@ public class SplatAnimator : MonoBehaviour
 
 
         // apply
-        reconstructionRoot.rotation =
-            rotationOffset * reconstructionRoot.rotation;
+        splatRoot.rotation =
+            rotationOffset * splatRoot.rotation;
 
         //get the distance from the first ref cam to the first current cam
         if (currentFrame == 0)
@@ -865,19 +919,24 @@ public class SplatAnimator : MonoBehaviour
 
         //apply the difference in position to the reconstruction root
         Vector3 delta = referencePositions[0] - renderCameras[0].transform.position;
-        reconstructionRoot.position += delta;
+        splatRoot.position = delta;
 
+        /*
+        camRoot.position = delta; 
+        camRoot.rotation = rotationOffset; 
+        camRoot.localScale = Vector3.one;
+        */
         //reconstructionRoot.localScale *= targetSceneSize;
-        
+
         for (int i = 0; i < numCameras; i++)
         {
-            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.forward * 0.2f, Color.blue, 100f);
-            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.up * 0.2f, Color.green, 100f);
-            Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.right * 0.2f, Color.red, 100f);
+            UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.forward * 0.2f, Color.blue, 100f);
+            UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.up * 0.2f, Color.green, 100f);
+            UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.right * 0.2f, Color.red, 100f);
         }
-
+        
+        UnityEngine.Debug.Log($"Alignment: {sw.ElapsedMilliseconds} ms");
     }
-
 
 
     public void NextFrame()
@@ -890,20 +949,28 @@ public class SplatAnimator : MonoBehaviour
 
         LoadCurrentFrame();
 
-        NextSplat.GaussiansFromCloud(pointCloud, 0.01f);
+        Vector3[] alignedPoints = new Vector3[pointCloud.Length];
+        Matrix4x4 transform = splatRoot.localToWorldMatrix;
+
+        for (int i = 0; i < pointCloud.Length; i++)
+        {
+            alignedPoints[i] = transform.MultiplyPoint3x4(pointCloud[i]);
+        }
+
+        NextSplat.GaussiansFromCloud(alignedPoints, 0.01f, targetSceneSize);
 
         for (int i = 0; i < numCameras; i++)
         {
             
             if (colorFrames == null || depthFrames == null)
             {
-                Debug.LogError($"Camera {i} frames missing");
+                UnityEngine.Debug.LogError($"Camera {i} frames missing");
                 continue;
             }
 
             if (currentFrame >= frameCount)
             {
-                Debug.LogError($"Frame overflow on camera {i}");
+                UnityEngine.Debug.LogError($"Frame overflow on camera {i}");
                 continue;
             }
 
