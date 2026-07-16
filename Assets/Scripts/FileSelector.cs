@@ -58,7 +58,7 @@ public class FileSelector : MonoBehaviour
                     false);
         }
 
-        animator.depthFrames = new Texture2D[camFolders.Length]; 
+        //animator.depthFrames = new Texture2D[camFolders.Length]; 
         animator.depthMaps = new RenderTexture[camFolders.Length];
 
         // ONLY LOAD DATA — DO NOT START PLAYBACK
@@ -73,8 +73,8 @@ public class FileSelector : MonoBehaviour
                 continue;
             }
 
-            LoadSingleImage(colourPath, animator.colorFrames[i]);
-            animator.depthFrames[i] = LoadDepthImage(depthPath);
+            LoadSingleImage(colourPath, i, animator.colorFrames[i]);
+            //animator.depthFrames[i] = LoadDepthImage(depthPath);
         }
 
         Debug.Log("Dataset loaded. Ready to start animation.");
@@ -121,14 +121,21 @@ public class FileSelector : MonoBehaviour
         return textures;
     }
 
-    public static void LoadSingleImage(string folder, Texture2D tex)
+    public static void LoadSingleImage(string folder, int cam, Texture2D tex)
     {
+        /*
         string file = Directory.GetFiles(folder)
             .FirstOrDefault(f =>
                 f.EndsWith(".png") ||
                 f.EndsWith(".jpg") ||
                 f.EndsWith(".jpeg") ||
                 f.EndsWith(".rgba"));
+        */
+
+        string file = Path.Combine(
+                folder,
+                $"{cam:000000}.rgba"
+            );
 
         if (file == null)
             return;

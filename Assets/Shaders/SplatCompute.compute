@@ -10,7 +10,7 @@ SamplerState sampler_ColorTex;
 RWTexture2D<int> DepthTexture; // WriteDepth kernel writes here
 
 Texture2D<float> _DepthTex;
-Texture2D<float> _DA3DepthTex;
+//Texture2D<float> _DA3DepthTex;
 
 StructuredBuffer<float3> _Positions;
 
@@ -247,9 +247,7 @@ void WriteDepth(uint id : SV_DispatchThreadID)
     */
     const int radius = 0;
 
-    float centerDA3 = _DA3DepthTex.Load(
-    int3(pixel, 0)
-);
+    //float centerDA3 = _DA3DepthTex.Load(int3(pixel, 0));
 
 
     for (int y = -radius; y <= radius; y++)
@@ -271,14 +269,12 @@ void WriteDepth(uint id : SV_DispatchThreadID)
 
 
 
-            float da3Depth = _DA3DepthTex.Load(
-            int3(p, 0)
-        );
+            //float da3Depth = _DA3DepthTex.Load(int3(p, 0));
 
 
         // ignore DA3 background
-            if (da3Depth <= 0)
-                continue;
+            //if (da3Depth <= 0)
+                //continue;
 
 
         /*
@@ -286,14 +282,14 @@ void WriteDepth(uint id : SV_DispatchThreadID)
           If the DA3 depth changes a lot,
           we are crossing an object boundary.
         */
-            
+            /*
             if (centerDA3 <= 0)
                 return;
 
             float boundaryDifference =
             abs(da3Depth - centerDA3);
 
-            /*
+            
             if (boundaryDifference > 0.02)
             {
                 continue;

@@ -44,7 +44,7 @@ public class SplatAnimator : MonoBehaviour
         splatBuffers[1 - activeBuffer];
 
     public Texture2D[] colorFrames;
-    public Texture2D[] depthFrames;
+    //public Texture2D[] depthFrames;
 
     public RenderTexture[] colorRenderTargets;
 
@@ -266,13 +266,13 @@ public class SplatAnimator : MonoBehaviour
             "DepthTexture",
             depthMinTexture
         );
-
+        /*
         splatCompute.SetTexture(
             kernel,
             "_DA3DepthTex",
             depthFrames[cameraIndex]
         );
-
+        */
         splatCompute.SetBuffer(
             kernel,
             "_Positions",
@@ -679,12 +679,7 @@ public class SplatAnimator : MonoBehaviour
 
         string frameFolder = FileSelector.frameFolders[currentFrame];
 
-        Stopwatch sw = Stopwatch.StartNew();
-
         pointCloud = LoadVertices(Path.Combine(frameFolder, "points.bin"));
-
-        UnityEngine.Debug.Log($"Load point cloud vertices: {sw.ElapsedMilliseconds} ms");
-        sw.Restart();
 
         glbCameras =
             LoadCameraVertices(Path.Combine(frameFolder, "cameras.bin"));
@@ -693,17 +688,10 @@ public class SplatAnimator : MonoBehaviour
         // Parse GLB
         //----------------------------------------------------
 
-        UnityEngine.Debug.Log($"load camera vertices: {sw.ElapsedMilliseconds} ms");
-
-        sw.Restart();
-
         splatRoot.position = Vector3.zero;
         splatRoot.rotation = Quaternion.identity;
         splatRoot.localScale = Vector3.one;
 
-        UnityEngine.Debug.Log($"AttachToRoot: {sw.ElapsedMilliseconds} ms");
-
-        sw.Restart();
 
         //----------------------------------------------------
         // Load colour/depth images
@@ -715,30 +703,15 @@ public class SplatAnimator : MonoBehaviour
             .OrderBy(f => f)
             .ToArray();
 
-        UnityEngine.Debug.Log($"Get cam directories: {sw.ElapsedMilliseconds} ms");
-
-        sw.Restart();
-
         for (int cam = 0; cam < numCameras; cam++)
         {
             string colourFolder = Path.Combine(camFolders[cam], "Colour");
             string depthFolder = Path.Combine(camFolders[cam], "Depth");
 
-            UnityEngine.Debug.Log($"Get image directories: {sw.ElapsedMilliseconds} ms");
+            FileSelector.LoadSingleImage(colourFolder, cam, colorFrames[cam]);
 
-            sw.Restart();
+            //depthFrames[cam] = FileSelector.LoadDepthImage(depthFolder);
 
-            FileSelector.LoadSingleImage(colourFolder, colorFrames[cam]);
-
-            UnityEngine.Debug.Log($"Load colour image: {sw.ElapsedMilliseconds} ms");
-
-            sw.Restart();
-
-            depthFrames[cam] = FileSelector.LoadDepthImage(depthFolder);
-
-            UnityEngine.Debug.Log($"Load depth frame: {sw.ElapsedMilliseconds} ms");
-
-            sw.Restart();
         }
 
         //----------------------------------------------------
@@ -748,11 +721,6 @@ public class SplatAnimator : MonoBehaviour
         importer.ApplyCameras();
 
         SetCamPositions(glbCameras);
-
-        UnityEngine.Debug.Log($"Camera setup: {sw.ElapsedMilliseconds} ms");
-
-        sw.Restart();
-
 
         //get the camera transforms for frame 0
         if (currentFrame == 0)
@@ -860,7 +828,6 @@ public class SplatAnimator : MonoBehaviour
             UnityEngine.Debug.DrawRay(renderCameras[i].transform.position, renderCameras[i].transform.rotation * Vector3.right * 0.2f, Color.red, 100f);
         }
         */
-        UnityEngine.Debug.Log($"Alignment: {sw.ElapsedMilliseconds} ms");
     }
 
 
@@ -888,7 +855,7 @@ public class SplatAnimator : MonoBehaviour
         for (int i = 0; i < numCameras; i++)
         {
             
-            if (colorFrames == null || depthFrames == null)
+            if (colorFrames == null)
             {
                 UnityEngine.Debug.LogError($"Camera {i} frames missing");
                 continue;
