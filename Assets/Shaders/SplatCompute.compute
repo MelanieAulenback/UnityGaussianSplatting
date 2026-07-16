@@ -126,7 +126,7 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     uint2 colorPixel;
 
     colorPixel.x = uv.x * ColorTextureWidth;
-    colorPixel.y = uv.y * ColorTextureHeight;
+    colorPixel.y = (1.0 - uv.y) * ColorTextureHeight;
 
     colorPixel.x = min(colorPixel.x, ColorTextureWidth - 1);
     colorPixel.y = min(colorPixel.y, ColorTextureHeight - 1);

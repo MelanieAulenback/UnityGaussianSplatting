@@ -715,18 +715,31 @@ public class SplatAnimator : MonoBehaviour
             .OrderBy(f => f)
             .ToArray();
 
+        UnityEngine.Debug.Log($"Get cam directories: {sw.ElapsedMilliseconds} ms");
+
+        sw.Restart();
+
         for (int cam = 0; cam < numCameras; cam++)
         {
             string colourFolder = Path.Combine(camFolders[cam], "Colour");
             string depthFolder = Path.Combine(camFolders[cam], "Depth");
 
-            colorFrames[cam] = FileSelector.LoadSingleImage(colourFolder);
-            depthFrames[cam] = FileSelector.LoadSingleImage(depthFolder);
+            UnityEngine.Debug.Log($"Get image directories: {sw.ElapsedMilliseconds} ms");
+
+            sw.Restart();
+
+            FileSelector.LoadSingleImage(colourFolder, colorFrames[cam]);
+
+            UnityEngine.Debug.Log($"Load colour image: {sw.ElapsedMilliseconds} ms");
+
+            sw.Restart();
+
+            depthFrames[cam] = FileSelector.LoadDepthImage(depthFolder);
+
+            UnityEngine.Debug.Log($"Load depth frame: {sw.ElapsedMilliseconds} ms");
+
+            sw.Restart();
         }
-
-        UnityEngine.Debug.Log($"Image loading: {sw.ElapsedMilliseconds} ms");
-
-        sw.Restart();
 
         //----------------------------------------------------
         // Update camera poses
@@ -853,7 +866,7 @@ public class SplatAnimator : MonoBehaviour
 
     public void NextFrame()
     {
-
+        Stopwatch frameSW = Stopwatch.StartNew();
         currentFrame++;
 
         if (currentFrame >= frameCount)
@@ -901,6 +914,10 @@ public class SplatAnimator : MonoBehaviour
         }
 
         RunGPUColouring(NextSplat);
+        UnityEngine.Debug.Log(
+            $"Frame generation time: {frameSW.ElapsedMilliseconds} ms " +
+            $"({1000f / frameSW.ElapsedMilliseconds:F2} FPS)"
+        );
     }
 
     void SwapSplats()
