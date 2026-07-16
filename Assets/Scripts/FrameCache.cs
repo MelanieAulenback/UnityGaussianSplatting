@@ -1,16 +1,13 @@
+using System;
 using UnityEngine;
 
-public class FrameCache : MonoBehaviour
+public class FrameCache
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
+    public byte[][] colourBytes;
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    public Vector3[] pointCloud;
+    public Vector3[][] cameraVertices;
+
+    public bool loaded;
+    public int frameIndex;
 }

@@ -12,6 +12,7 @@ using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 using static UnityEngine.Rendering.DebugUI.Table;
+using System.Threading.Tasks;
 
 public class SplatAnimator : MonoBehaviour
 {
@@ -76,6 +77,14 @@ public class SplatAnimator : MonoBehaviour
 
     private Matrix4x4 currentFrameAlignment = Matrix4x4.identity;
     private Matrix4x4 reconstructionMatrix = Matrix4x4.identity;
+
+    const int CACHE_SIZE = 5;
+
+    FrameCache[] frameCache;
+
+    int cacheStartFrame = 0;
+
+    Task loadingTask;
 
     private void Start()
     {
@@ -324,11 +333,83 @@ public class SplatAnimator : MonoBehaviour
             1
         );
     }
+    async Task LoadFrameAsync(int frame)
+    {
+        int slot = frame % CACHE_SIZE;
+
+        if (frameCache[slot].loaded &&
+            frameCache[slot].frameIndex == frame)
+            return;
+
+        frameCache[slot].loaded = false;
+
+        string frameFolder = FileSelector.frameFolders[frame];
+
+        //-------------------------------------------------
+        // Start loading everything in parallel
+        //-------------------------------------------------
+
+        Task<Vector3[]> pointTask =
+            Task.Run(() =>
+                LoadVertices(Path.Combine(frameFolder, "points.bin")));
+
+        Task<Vector3[][]> cameraTask =
+            Task.Run(() =>
+                LoadCameraVertices(Path.Combine(frameFolder, "cameras.bin")));
+
+        Task<byte[]>[] colourTasks = new Task<byte[]>[numCameras];
+
+        for (int cam = 0; cam < numCameras; cam++)
+        {
+            string file =
+                Path.Combine(
+                    frameFolder,
+                    "Cameras",
+                    $"Cam{cam:000}",
+                    "Colour",
+                    $"{cam:000000}.rgba");
+
+            colourTasks[cam] =
+                Task.Run(() => File.ReadAllBytes(file));
+        }
+
+        //-------------------------------------------------
+        // Wait for point cloud and cameras
+        //-------------------------------------------------
+
+        frameCache[slot].pointCloud = await pointTask;
+        frameCache[slot].cameraVertices = await cameraTask;
+
+        //-------------------------------------------------
+        // Wait for every colour image
+        //-------------------------------------------------
+
+        await Task.WhenAll(colourTasks);
+
+        for (int cam = 0; cam < numCameras; cam++)
+        {
+            frameCache[slot].colourBytes[cam] =
+                colourTasks[cam].Result;
+        }
+
+        frameCache[slot].frameIndex = frame;
+        frameCache[slot].loaded = true;
+    }
+
     // =====================================================
     // INIT FROM GLB + DATASET
     // =====================================================
     public void InitializeScene()
     {
+        frameCache = new FrameCache[CACHE_SIZE];
+
+        for (int i = 0; i < CACHE_SIZE; i++)
+        {
+            frameCache[i] = new FrameCache();
+            frameCache[i].colourBytes = new byte[numCameras][];
+            frameCache[i].loaded = false;
+        }
+
         CreateCamerasFromDataset();
 
         importer.InitializeCameras();
@@ -523,9 +604,17 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     // PLAYBACK
     // =====================================================
-    public void StartPlayback()
+    public async void StartPlayback()
     {
         InitializeScene();
+
+        for (int i = 0; i < CACHE_SIZE && i < frameCount; i++)
+            _ = LoadFrameAsync(i);
+
+        // Wait until frame 0 is ready
+        while (!frameCache[0].loaded)
+            await Task.Yield();
+
         LoadCurrentFrame();
 
         if (renderCameras == null || renderCameras.Length == 0)
@@ -679,10 +768,16 @@ public class SplatAnimator : MonoBehaviour
 
         string frameFolder = FileSelector.frameFolders[currentFrame];
 
-        pointCloud = LoadVertices(Path.Combine(frameFolder, "points.bin"));
+        int slot = currentFrame % CACHE_SIZE;
 
-        glbCameras =
-            LoadCameraVertices(Path.Combine(frameFolder, "cameras.bin"));
+        if (!frameCache[slot].loaded)
+        {
+            UnityEngine.Debug.Log("Frame not ready.");
+            return;
+        }
+
+        pointCloud = frameCache[slot].pointCloud;
+        glbCameras = frameCache[slot].cameraVertices;
 
         //----------------------------------------------------
         // Parse GLB
@@ -697,19 +792,20 @@ public class SplatAnimator : MonoBehaviour
         // Load colour/depth images
         //----------------------------------------------------
 
-        string camerasPath = Path.Combine(frameFolder, "Cameras");
-
-        string[] camFolders = Directory.GetDirectories(camerasPath)
-            .OrderBy(f => f)
-            .ToArray();
-
         for (int cam = 0; cam < numCameras; cam++)
         {
-            string colourFolder = Path.Combine(camFolders[cam], "Colour");
-            string depthFolder = Path.Combine(camFolders[cam], "Depth");
 
-            FileSelector.LoadSingleImage(colourFolder, cam, colorFrames[cam]);
+            if (!frameCache[slot].loaded)
+            {
+                UnityEngine.Debug.Log("Frame not ready.");
+                return;
+            }
+            
+            colorFrames[cam].LoadRawTextureData(
+                frameCache[slot].colourBytes[cam]);
 
+            colorFrames[cam].Apply(false);
+            
             //depthFrames[cam] = FileSelector.LoadDepthImage(depthFolder);
 
         }
@@ -820,6 +916,14 @@ public class SplatAnimator : MonoBehaviour
 
         AttachToRoot();
 
+        int preloadFrame =
+     (currentFrame + CACHE_SIZE) % frameCount;
+
+        if (loadingTask == null || loadingTask.IsCompleted)
+        {
+            loadingTask = LoadFrameAsync(preloadFrame);
+        }
+
         /*
         for (int i = 0; i < numCameras; i++)
         {
@@ -833,13 +937,15 @@ public class SplatAnimator : MonoBehaviour
 
     public void NextFrame()
     {
-        Stopwatch frameSW = Stopwatch.StartNew();
+        Stopwatch sw = Stopwatch.StartNew();
         currentFrame++;
 
         if (currentFrame >= frameCount)
             currentFrame = 0;
 
         LoadCurrentFrame();
+        UnityEngine.Debug.Log($"LoadCurrentFrame: {sw.ElapsedMilliseconds} ms");
+        sw.Restart();
 
         Vector3[] alignedPoints = new Vector3[pointCloud.Length];
 
@@ -850,7 +956,13 @@ public class SplatAnimator : MonoBehaviour
                         pointCloud[i]);
         }
 
+        UnityEngine.Debug.Log($"Align points: {sw.ElapsedMilliseconds} ms");
+        sw.Restart();
+
         NextSplat.GaussiansFromCloud(alignedPoints, gaussianSize);
+
+        UnityEngine.Debug.Log($"GaussiansFromCloud: {sw.ElapsedMilliseconds} ms");
+        sw.Restart();
 
         for (int i = 0; i < numCameras; i++)
         {
@@ -880,10 +992,15 @@ public class SplatAnimator : MonoBehaviour
                 depthMaps[i]);
         }
 
+        UnityEngine.Debug.Log($"Depth generation: {sw.ElapsedMilliseconds} ms");
+        sw.Restart();
+
         RunGPUColouring(NextSplat);
+        UnityEngine.Debug.Log($"RunGPUColouring dispatch: {sw.ElapsedMilliseconds} ms");
+
         UnityEngine.Debug.Log(
-            $"Frame generation time: {frameSW.ElapsedMilliseconds} ms " +
-            $"({1000f / frameSW.ElapsedMilliseconds:F2} FPS)"
+            $"Frame generation time: {sw.ElapsedMilliseconds} ms " +
+            $"({1000f / sw.ElapsedMilliseconds:F2} FPS)"
         );
     }
 
