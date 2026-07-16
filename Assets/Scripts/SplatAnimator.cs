@@ -78,6 +78,8 @@ public class SplatAnimator : MonoBehaviour
     private Matrix4x4 currentFrameAlignment = Matrix4x4.identity;
     private Matrix4x4 reconstructionMatrix = Matrix4x4.identity;
 
+    Vector3[] alignedPoints;
+
     const int CACHE_SIZE = 5;
 
     FrameCache[] frameCache;
@@ -193,9 +195,6 @@ public class SplatAnimator : MonoBehaviour
                 1
             );
 
-            Vector4[] debug = new Vector4[3];
-
-            targetSplat.DebugBuffer.GetData(debug);
 
         }
 
@@ -937,17 +936,19 @@ public class SplatAnimator : MonoBehaviour
 
     public void NextFrame()
     {
-        Stopwatch sw = Stopwatch.StartNew();
+        //Stopwatch sw = Stopwatch.StartNew();
         currentFrame++;
 
         if (currentFrame >= frameCount)
             currentFrame = 0;
 
         LoadCurrentFrame();
-        UnityEngine.Debug.Log($"LoadCurrentFrame: {sw.ElapsedMilliseconds} ms");
-        sw.Restart();
 
-        Vector3[] alignedPoints = new Vector3[pointCloud.Length];
+        if (alignedPoints == null ||
+           alignedPoints.Length != pointCloud.Length)
+        {
+            alignedPoints = new Vector3[pointCloud.Length];
+        }
 
         for (int i = 0; i < pointCloud.Length; i++)
         {
@@ -956,13 +957,7 @@ public class SplatAnimator : MonoBehaviour
                         pointCloud[i]);
         }
 
-        UnityEngine.Debug.Log($"Align points: {sw.ElapsedMilliseconds} ms");
-        sw.Restart();
-
         NextSplat.GaussiansFromCloud(alignedPoints, gaussianSize);
-
-        UnityEngine.Debug.Log($"GaussiansFromCloud: {sw.ElapsedMilliseconds} ms");
-        sw.Restart();
 
         for (int i = 0; i < numCameras; i++)
         {
@@ -992,16 +987,13 @@ public class SplatAnimator : MonoBehaviour
                 depthMaps[i]);
         }
 
-        UnityEngine.Debug.Log($"Depth generation: {sw.ElapsedMilliseconds} ms");
-        sw.Restart();
-
         RunGPUColouring(NextSplat);
-        UnityEngine.Debug.Log($"RunGPUColouring dispatch: {sw.ElapsedMilliseconds} ms");
-
+        /*
         UnityEngine.Debug.Log(
             $"Frame generation time: {sw.ElapsedMilliseconds} ms " +
             $"({1000f / sw.ElapsedMilliseconds:F2} FPS)"
         );
+        */
     }
 
     void SwapSplats()

@@ -1381,7 +1381,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
   - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
   colorFrames: []
-  depthFrames: []
   colorRenderTargets: []
   numCameras: 8
   fps: 30
@@ -1460,7 +1459,7 @@ VisualEffect:
       m_Array: []
     m_Uint:
       m_Array:
-      - m_Value: 270951
+      - m_Value: 270950
         m_Name: Count
         m_Overridden: 1
     m_Int:
@@ -2177,7 +2176,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!64 &1392966398
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -3407,7 +3406,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &2000980341
 MonoBehaviour:
   m_ObjectHideFlags: 0

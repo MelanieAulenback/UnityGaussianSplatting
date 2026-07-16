@@ -61,60 +61,50 @@ public class SplatData : ScriptableObject
     public int Count => Positions != null ? Positions.Length : 0;
 
     public void GaussiansFromCloud(
-    Vector3[] verts,
-    float gaussianSize)
+ Vector3[] verts,
+ float gaussianSize)
     {
-        Dispose();
+        bool needsInit =
+            Positions == null ||
+            Positions.Length != verts.Length ||
+            _positionsA == null;
 
-        // create lists for position, colour, and axes
-        //var positions = new List<Vector3>();
-        //var colors = new List<Color>();
-        //var axes = new List<Vector3>();
 
-        // get mesh
-        //Mesh mesh = pointCloud.GetComponent<MeshFilter>().sharedMesh;
-        //Transform t = pointCloud.transform;
+        Positions = verts;
 
-        //Vector3[] verts = mesh.vertices;
 
-        Positions = new Vector3[verts.Length];
+        if (!needsInit)
+        {
+            UpdatePositionsOnly(verts);
+            return;
+        }
+
+
         Colors = new Color[verts.Length];
         Axes = new Vector3[verts.Length * 3];
 
-        // loop vertices
+
         for (int i = 0; i < verts.Length; i++)
         {
-            Positions[i] = verts[i];
-
-
-            // Placeholder. Compute shader overwrites these.
             Colors[i] = Color.black;
 
             int a = i * 3;
-            Axes[a] = Vector3.right * gaussianSize;
-            Axes[a + 1] = Vector3.up * gaussianSize;
-            Axes[a + 2] = Vector3.forward * gaussianSize;
-            /*
-            positions.Add(verts[v]);
-            colors.Add(vertexCol);
 
-            axes.Add(Vector3.right * gaussianSize);
-            axes.Add(Vector3.up * gaussianSize);
-            axes.Add(Vector3.forward * gaussianSize);
-            */
+            Axes[a] =
+                Vector3.right * gaussianSize;
+
+            Axes[a + 1] =
+                Vector3.up * gaussianSize;
+
+            Axes[a + 2] =
+                Vector3.forward * gaussianSize;
         }
-        /*
-        Positions = positions.ToArray();
-        Colors = colors.ToArray();
-        Axes = axes.ToArray();
-        */
+
 
         InitializeBuffers();
-
-        //Debug.Log($"Generated {Positions.Length} gaussians (weighted splat).");
     }
 
-    
+
     public void ResetAccumulation()
     {
         if (_accumColorBuffer == null || _contributionBuffer == null) return;
@@ -193,6 +183,8 @@ public class SplatData : ScriptableObject
 
     public void UpdatePositionsOnly(Vector3[] p)
     {
+        Positions = p;
+
         _positionsA.SetData(p);
         _positionsB.SetData(p);
     }
