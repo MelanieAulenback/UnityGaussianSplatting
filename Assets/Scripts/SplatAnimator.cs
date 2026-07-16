@@ -516,7 +516,8 @@ public class SplatAnimator : MonoBehaviour
         foreach (var cam in renderCameras)
             cam.transform.SetParent(reconstructionRoot, false);
 
-        reconstructionRoot.localScale = Vector3.one * targetSceneSize;
+        Vector3 scaleX = new Vector3(-1, 1, 1);
+        reconstructionRoot.localScale = scaleX * targetSceneSize;
     }
 
     // =====================================================
