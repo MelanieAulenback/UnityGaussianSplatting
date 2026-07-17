@@ -420,6 +420,7 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     public void InitializeScene()
     {
+        //create an array of 5 frame cache objects
         frameCache = new FrameCache[CACHE_SIZE];
 
         for (int i = 0; i < CACHE_SIZE; i++)
@@ -429,9 +430,13 @@ public class SplatAnimator : MonoBehaviour
             frameCache[i].loaded = false;
         }
 
+        //create the cameras
         CreateCamerasFromDataset();
 
+        //set camera intrinsics
         importer.InitializeCameras();
+
+        //assign render cameras to importer cameras for consistency
         importer.cameras = renderCameras;
 
     }
@@ -441,23 +446,30 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     void CreateCamerasFromDataset()
     {
+        //get the camera folders for the current frame
         string[] camFolders = Directory.GetDirectories(FileSelector.frameFolders[currentFrame])
             .OrderBy(f => f)
             .ToArray();
 
+        //num cameras is equal to teh number of camera folders
         numCameras = camFolders.Length;
 
+        //initialize arrays
         renderCameras = new Camera[numCameras];
         depthMaps = new RenderTexture[numCameras];
         depthMinMaps = new RenderTexture[numCameras];
 
+        //for the number of cameras
         for (int i = 0; i < numCameras; i++)
         {
+            //create a camera
             GameObject camObj = new GameObject($"RenderCam_{i:000}");
             Camera cam = camObj.AddComponent<Camera>();
 
+            //add it to the render cameras array
             renderCameras[i] = cam;
 
+            //create a depth map for the current camera
             depthMaps[i] = new RenderTexture(
             DA3CameraImporter.imageWidth,
             DA3CameraImporter.imageHeight,
@@ -480,7 +492,6 @@ public class SplatAnimator : MonoBehaviour
         //Debug.Log($"Created {numCameras} Unity cameras");
 
     }
-
 
     // -----------------------------------------------------
     // 3. Set camera positions from camera point clouds
@@ -548,15 +559,17 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     void AttachToRoot()
     {
-
+        //create the reconstruction root object if it doesnt already exist
         if (reconstructionRoot == null)
         {
             GameObject reconstruction = new GameObject("ReconstructionRoot");
             reconstructionRoot = reconstruction.transform;
         }
 
+        //attach splat to root
         splatRoot.SetParent(reconstructionRoot, false);
 
+        //attach cameras to root
         foreach (var cam in renderCameras)
             cam.transform.SetParent(reconstructionRoot, false);
 
@@ -572,16 +585,16 @@ public class SplatAnimator : MonoBehaviour
     {
         using FileStream stream = File.OpenRead(path);
 
-        // Read vertex count
+        //read vertex count
         byte[] countBytes = new byte[4];
         stream.Read(countBytes, 0, 4);
 
         int count = System.BitConverter.ToInt32(countBytes, 0);
 
-        // Allocate output array
+        //allocate output array
         Vector3[] verts = new Vector3[count];
 
-        // Read directly into the Vector3 array's memory
+        //read directly into the Vector3 array's memory
         Span<byte> vertexBytes = MemoryMarshal.AsBytes(verts.AsSpan());
 
         int totalRead = 0;
@@ -602,22 +615,30 @@ public class SplatAnimator : MonoBehaviour
     //load camera vertices
     public static Vector3[][] LoadCameraVertices(string path)
     {
-        using (BinaryReader reader =
-            new BinaryReader(File.OpenRead(path)))
+        //open the binary file for reading
+        using (BinaryReader reader = new BinaryReader(File.OpenRead(path)))
         {
+            //read how many cameras are stored in the file
             int cameraCount = reader.ReadInt32();
 
-            Vector3[][] cameras =
-                new Vector3[cameraCount][];
+            //create an array to hold the vertices for each camera
+            //each camera can have its own array of vertices
+            Vector3[][] cameras = new Vector3[cameraCount][];
 
+            //read the data for each camera
             for (int c = 0; c < cameraCount; c++)
             {
+                //read how many vertices this camera contains
                 int vertexCount = reader.ReadInt32();
 
+                //create an array to store this camera's vertices
                 cameras[c] = new Vector3[vertexCount];
 
+                //read every vertex position
                 for (int i = 0; i < vertexCount; i++)
                 {
+                    //each Vector3 is stored as three floats:
+                    //x, y and z
                     cameras[c][i] = new Vector3(
                         reader.ReadSingle(),
                         reader.ReadSingle(),
@@ -625,6 +646,7 @@ public class SplatAnimator : MonoBehaviour
                 }
             }
 
+            //return all cameras and their vertex positions
             return cameras;
         }
     }
@@ -634,17 +656,29 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     public void RunGPUColouring(SplatData targetSplat)
     {
+        //get the number of gaussians that need to be coloured
         int count = targetSplat.Count;
 
+        //find the compute shader kernel that projects colours
+        //from the camera images onto the gaussians
         int kernel = splatCompute.FindKernel("ColourGaussians");
 
+        //store the current frame so we know which frame
+        //this colouring operation belongs to
         int requestedFrame = currentFrame;
 
+        //mark colouring as still in progress
         colourReady = false;
 
+        //clear any accumulated colours and contribution counts
+        //from the previous colouring pass
         targetSplat.ResetAccumulation();
 
+        //--------------------------------------------------------
         // Reset best camera scores
+        //--------------------------------------------------------
+        //create an array of the worst possible camera scores
+        //every gaussian starts with no valid camera assigned
         float[] initialScores = new float[count];
 
         for (int i = 0; i < count; i++)
@@ -652,14 +686,22 @@ public class SplatAnimator : MonoBehaviour
             initialScores[i] = float.MaxValue;
         }
 
+        //upload the initial scores to the GPU
         targetSplat.BestCameraScoreBuffer.SetData(initialScores);
+
+        //--------------------------------------------------------
+        // Project every camera onto the gaussians
+        //-------------------------------------------------------
 
         for (int cam = 0; cam < numCameras; cam++)
         {
+            //get this camera's colour image
             Texture2D image = colorFrames[cam];
 
+            //tell the compute shader how many gaussians to process
             splatCompute.SetInt("_GaussianCount", count);
 
+            //pass the colour image dimensions to the shader
             splatCompute.SetInt(
                 "ColorTextureWidth",
                 image.width
@@ -670,15 +712,20 @@ public class SplatAnimator : MonoBehaviour
                 image.height
             );
 
+            //pass the depth texture dimensions
             splatCompute.SetInt("TextureWidth", depthMaps[cam].width);
             splatCompute.SetInt("TextureHeight", depthMaps[cam].height);
 
+            //buffer storing the best camera score for each gaussian
             splatCompute.SetBuffer(
                 kernel,
                 "_BestCameraScore",
                 targetSplat.BestCameraScoreBuffer
             );
 
+            //build the view-projection matrix for this camera
+            //this converts world-space gaussian positions into
+            //the camera's screen coordinates
             Matrix4x4 vp =
                 GL.GetGPUProjectionMatrix(
                     renderCameras[cam].projectionMatrix,
@@ -689,45 +736,53 @@ public class SplatAnimator : MonoBehaviour
 
             splatCompute.SetMatrix("_ViewProj", vp);
 
-
+            //supply the gaussian positions
             splatCompute.SetBuffer(
                 kernel,
                 "_Positions",
                 targetSplat.PositionsBuffer
             );
 
+            //buffer that accumulates colour values from every camera
             splatCompute.SetBuffer(
                 kernel,
                 "_AccumColor",
                 targetSplat.AccumColorBuffer
             );
 
+            //buffer that counts how many cameras contributed to each gaussian
             splatCompute.SetBuffer(
                 kernel,
                 "_Contribution",
                 targetSplat.ContributionBuffer
             );
 
+            //optional debug buffer for inspecting shader values
             splatCompute.SetBuffer(
                 kernel,
                 "_DebugBuffer",
                 targetSplat.DebugBuffer
             );
 
+            //supply the colour image for this camera
             splatCompute.SetTexture(
                 kernel,
                 "_ColorTex",
                 image
             );
 
+            //supply the depth map used for occlusion testing
             splatCompute.SetTexture(
                 kernel,
                 "_DepthTex",
                  depthMaps[cam]
             );
 
+            //calculate how many thread groups are needed
+            //the compute shader processes 256 gaussians per group
             int groups = Mathf.CeilToInt(count / 256f);
 
+            //execute the ColourGaussians kernel
             splatCompute.Dispatch(
                 kernel,
                 groups,
@@ -738,8 +793,11 @@ public class SplatAnimator : MonoBehaviour
 
         }
 
-            
-        // finalize average colors
+        //--------------------------------------------------------
+        // Average the accumulated colours
+        //--------------------------------------------------------
+        //run a second compute shader that converts the accumulated
+        //colours into the final colour for each gaussian
         int finalize = splatCompute.FindKernel("FinalizeColours");
 
         splatCompute.SetInt("_GaussianCount", count);
@@ -762,7 +820,7 @@ public class SplatAnimator : MonoBehaviour
             targetSplat.FinalColorBuffer
         );
 
-
+        //dispatch the final averaging kernel
         int finalGroups = Mathf.CeilToInt(count / 256f);
         
         splatCompute.Dispatch(
@@ -772,31 +830,39 @@ public class SplatAnimator : MonoBehaviour
             1
         );
 
-
+        //--------------------------------------------------------
+        // Copy the final colours back from the GPU
+        //--------------------------------------------------------
+        //request an asynchronous readback so Unity does not
+        //stall while waiting for the GPU to finish
         AsyncGPUReadback.Request(
         targetSplat.FinalColorBuffer,
         request =>
         {
+            //stop if the GPU readback failed
             if (request.hasError)
             {
                 UnityEngine.Debug.LogError("Colour readback failed");
                 return;
             }
 
-
+            //read the GPU colour buffer
             var data = request.GetData<Vector4>();
 
+            //convert the Vector4 values into Unity Color objects
             Color[] colors = new Color[data.Length];
 
             for (int i = 0; i < data.Length; i++)
                 colors[i] = data[i];
 
-
+            //store the colours on the CPU and upload them to the rendering buffers
             targetSplat.Colors = colors;
             targetSplat.UpdateColorsOnly(colors);
 
+            //colouring has finished
             colourReady = true;
 
+            //make the newly coloured splat the active one
             SwapSplats();
         });
     }
@@ -952,34 +1018,47 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     // CACHE
     // =====================================================
+    //asynchronously loads all of the data needed for one animation frame
+    //this includes the point cloud, camera vertices and colour images
     async Task LoadFrameAsync(int frame)
     {
+        //determine which cache slot this frame should use
+        //the cache acts as a circular buffer, so old frames are reused
         int slot = frame % CACHE_SIZE;
 
+        //if this frame is already loaded into the cache,
+        //there is nothing more to do
         if (frameCache[slot].loaded &&
             frameCache[slot].frameIndex == frame)
             return;
 
+        //mark this cache slot as currently being loaded
         frameCache[slot].loaded = false;
 
+        //get the folder containing all files for this frame
         string frameFolder = FileSelector.frameFolders[frame];
 
         //-------------------------------------------------
         // Start loading everything in parallel
         //-------------------------------------------------
 
+        //begin loading the point cloud on a background thread
+        //the main Unity thread can continue running while this loads
         Task<Vector3[]> pointTask =
             Task.Run(() =>
                 LoadVertices(Path.Combine(frameFolder, "points.bin")));
 
+        //begin loading the camera vertex data at the same time
         Task<Vector3[][]> cameraTask =
             Task.Run(() =>
                 LoadCameraVertices(Path.Combine(frameFolder, "cameras.bin")));
 
+        //create one loading task for each camera image
         Task<byte[]>[] colourTasks = new Task<byte[]>[numCameras];
 
         for (int cam = 0; cam < numCameras; cam++)
         {
+            //build the path to this camera's colour image
             string file =
                 Path.Combine(
                     frameFolder,
@@ -988,6 +1067,8 @@ public class SplatAnimator : MonoBehaviour
                     "Colour",
                     $"{cam:000000}.rgba");
 
+            //begin loading the image bytes in parallel
+            //every camera image starts loading immediately
             colourTasks[cam] =
                 Task.Run(() => File.ReadAllBytes(file));
         }
@@ -995,7 +1076,8 @@ public class SplatAnimator : MonoBehaviour
         //-------------------------------------------------
         // Wait for point cloud and cameras
         //-------------------------------------------------
-
+        //wait until the point cloud and camera vertices have finished loading,
+        //then store it in the cache
         frameCache[slot].pointCloud = await pointTask;
         frameCache[slot].cameraVertices = await cameraTask;
 
@@ -1005,19 +1087,23 @@ public class SplatAnimator : MonoBehaviour
 
         await Task.WhenAll(colourTasks);
 
+        //copy the loaded image bytes into the cache
         for (int cam = 0; cam < numCameras; cam++)
         {
             frameCache[slot].colourBytes[cam] =
                 colourTasks[cam].Result;
         }
 
+        //record which animation frame is stored in this cache slot
         frameCache[slot].frameIndex = frame;
+
+        //mark this cache entry as completely loaded and ready to use
         frameCache[slot].loaded = true;
     }
     
+    //swaps between 2 splat buffers
     void SwapSplats()
     {
         activeBuffer = 1 - activeBuffer;
-
     }
 }
