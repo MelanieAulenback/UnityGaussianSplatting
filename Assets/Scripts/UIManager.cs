@@ -5,18 +5,20 @@ using UnityEngine.UI;
 public class UIManager : MonoBehaviour
 {
     public Canvas menu;
+    public Button startButton;
     public SplatAnimator animator;
     private Camera[] renderCams;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    public static bool startAnimation;
+
     void Start()
     {
+        //free range mouse
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-
+        startAnimation = false;
     }
 
-    // Update is called once per frame
     void Update()
     {
         //if the menu's not visible, allow mouse to act as player's view and disable render cam
@@ -36,6 +38,24 @@ public class UIManager : MonoBehaviour
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
+        }
+
+        //if the dataset isn't loaded, disable start button
+        if (!startAnimation)
+        {
+            startButton.interactable = false;
+            ColorBlock colors = startButton.colors;
+            colors.normalColor = Color.gray;
+            startButton.colors = colors;
+        }
+
+        //if the dataset is loaded, enable start button
+        if (startAnimation)
+        {
+            startButton.interactable = true;
+            ColorBlock colors = startButton.colors;
+            colors.normalColor = Color.white;
+            startButton.colors = colors;
         }
     }
 }

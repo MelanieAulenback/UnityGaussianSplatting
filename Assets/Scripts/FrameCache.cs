@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 
+//cache class for preloading colour images and point clouds
 public class FrameCache
 {
     public byte[][] colourBytes;

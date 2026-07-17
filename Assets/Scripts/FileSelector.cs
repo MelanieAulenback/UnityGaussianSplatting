@@ -12,8 +12,10 @@ public class FileSelector : MonoBehaviour
     public static string datasetRoot;
     public static string[] frameFolders;
 
+    //sets up the database, loads folders, counts frames and cameras
     public void SelectDataset()
     {
+        //select dataset folder
         string[] paths = StandaloneFileBrowser.OpenFolderPanel(
             "Select Dataset Folder",
             "",
@@ -25,7 +27,7 @@ public class FileSelector : MonoBehaviour
 
         datasetRoot = paths[0];
 
-
+        //get the frame folders
         frameFolders = Directory.GetDirectories(datasetRoot)
         .OrderBy(f => f)
         .ToArray();
@@ -36,7 +38,7 @@ public class FileSelector : MonoBehaviour
             return;
         }
 
-
+        //get the camera folders
         string camerasPath = Path.Combine(frameFolders[0], "Cameras");
 
         string[] camFolders = Directory.GetDirectories(camerasPath)
@@ -46,6 +48,7 @@ public class FileSelector : MonoBehaviour
         animator.numCameras = camFolders.Length;
         animator.frameCount = frameFolders.Length;
 
+        //create array of colour image textures
         animator.colorFrames = new Texture2D[camFolders.Length];
 
         for (int i = 0; i < camFolders.Length; i++)
@@ -58,14 +61,14 @@ public class FileSelector : MonoBehaviour
                     false);
         }
 
-        //animator.depthFrames = new Texture2D[camFolders.Length]; 
+        //create array of depth map textures
         animator.depthMaps = new RenderTexture[camFolders.Length];
 
-        // ONLY LOAD DATA — DO NOT START PLAYBACK
+        //ONLY LOAD DATA (colour images) — DO NOT START PLAYBACK
         for (int i = 0; i < camFolders.Length; i++)
         {
             string colourPath = Path.Combine(camFolders[i], "Colour");
-            string depthPath = Path.Combine(camFolders[i], "Depth");
+            //string depthPath = Path.Combine(camFolders[i], "Depth");
 
             if (!Directory.Exists(colourPath))
             {
@@ -74,13 +77,14 @@ public class FileSelector : MonoBehaviour
             }
 
             LoadSingleImage(colourPath, i, animator.colorFrames[i]);
-            //animator.depthFrames[i] = LoadDepthImage(depthPath);
         }
 
+        //enable animation to start
+        UIManager.startAnimation = true;
         Debug.Log("Dataset loaded. Ready to start animation.");
     }
 
-    // 🔥 NEW: call this from your UI button
+    //starts the animation when the start button is pressed
     public void StartAnimation()
     {
         if (animator.colorFrames == null || animator.colorFrames.Length == 0)
@@ -92,46 +96,14 @@ public class FileSelector : MonoBehaviour
         animator.frameCount = frameFolders.Length;
         animator.StartPlayback();
 
+        //disable menu
         if (menu != null)
             menu.enabled = false;
     }
 
-    Texture2D[] LoadFolder(string folder)
-    {
-        string[] files = Directory.GetFiles(folder)
-            .Where(f =>
-                f.EndsWith(".png") ||
-                f.EndsWith(".jpg") ||
-                f.EndsWith(".jpeg"))
-            .OrderBy(f => f)
-            .ToArray();
-
-        Texture2D[] textures = new Texture2D[files.Length];
-
-        for (int i = 0; i < files.Length; i++)
-        {
-            byte[] bytes = File.ReadAllBytes(files[i]);
-
-            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            tex.LoadImage(bytes);
-
-            textures[i] = tex;
-        }
-
-        return textures;
-    }
-
+    //accesses the current colour image from folder directory
     public static void LoadSingleImage(string folder, int cam, Texture2D tex)
     {
-        /*
-        string file = Directory.GetFiles(folder)
-            .FirstOrDefault(f =>
-                f.EndsWith(".png") ||
-                f.EndsWith(".jpg") ||
-                f.EndsWith(".jpeg") ||
-                f.EndsWith(".rgba"));
-        */
-
         string file = Path.Combine(
                 folder,
                 $"{cam:000000}.rgba"
@@ -142,29 +114,10 @@ public class FileSelector : MonoBehaviour
 
         byte[] bytes = File.ReadAllBytes(file);
 
-        //tex.LoadImage(bytes);
         tex.LoadRawTextureData(bytes);
+
+        //pass texture changes from cpu to gpu and keep readable copy on cpu
         tex.Apply(false);
-
-    }
-
-    public static Texture2D LoadDepthImage(string folder)
-    {
-        string file = Directory.GetFiles(folder)
-            .FirstOrDefault(f =>
-                f.EndsWith(".png") ||
-                f.EndsWith(".jpg") ||
-                f.EndsWith(".jpeg"));
-
-        if (file == null)
-            return null;
-
-        byte[] bytes = File.ReadAllBytes(file);
-
-        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-        tex.LoadImage(bytes);
-
-        return tex;
 
     }
 }

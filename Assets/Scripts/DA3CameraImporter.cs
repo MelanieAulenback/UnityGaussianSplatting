@@ -44,7 +44,7 @@ public class DA3CameraImporter : MonoBehaviour
     }
 
     // -----------------------------
-    // CORE
+    // CORE - just applies intrinsics to the current cam
     // -----------------------------
     public void ApplyCamera(int i)
     {
@@ -112,7 +112,6 @@ public class DA3CameraImporter : MonoBehaviour
 
         proj[3, 2] = -1f;
 
-        //cam.projectionMatrix = proj;
         cam.projectionMatrix = GL.GetGPUProjectionMatrix(proj, false);
         cam.aspect = (float)width / height;
     }

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 
+//creates a splat data object from assets
 public class SplatDataCreator
 {
     [MenuItem("Assets/Create/Splat Data")]

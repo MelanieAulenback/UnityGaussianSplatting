@@ -6,6 +6,8 @@ public class DepthDisplaySetup : MonoBehaviour
     public Material colourMaterial;
     public SplatAnimator splatAnimator;
 
+    //applies depth map and coloured image on the two planes
+    //for comparing
     public void SetupDepthTexture()
     {
 
@@ -31,26 +33,6 @@ public class DepthDisplaySetup : MonoBehaviour
             "_MaxDepth",
             10f
         );
-
-        /*
-        float aspect = 0;
-
-        if (gameObject.name == "Depth texture")
-        {
-            aspect =
-                (float)splatAnimator.depthMaps[splatAnimator.currentFrame].width /
-                splatAnimator.depthMaps[splatAnimator.currentFrame].height;
-        }
-        else if (gameObject.name == "Colour Texture")
-        {
-            aspect =
-                (float)splatAnimator.colorFrames[splatAnimator.currentFrame].width /
-                splatAnimator.colorFrames[splatAnimator.currentFrame].height;
-        }
-        Debug.Log("depth width: " + splatAnimator.depthMaps[splatAnimator.currentFrame].width + " depth height: " + splatAnimator.depthMaps[splatAnimator.currentFrame].height);
-        Debug.Log("colour width: " + splatAnimator.colorFrames[splatAnimator.currentFrame].width + " colour height: " + splatAnimator.colorFrames[splatAnimator.currentFrame].height);
-
-        */
 
     }
 }

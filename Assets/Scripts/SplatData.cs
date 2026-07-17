@@ -30,7 +30,7 @@ public class SplatData : ScriptableObject
     public GraphicsBuffer BestCameraScoreBuffer;
 
     // =========================================================
-    // GPU COLOR ACCUMULATION (NEW)
+    // GPU COLOR ACCUMULATION
     // =========================================================
     private GraphicsBuffer _accumColorBuffer;     // float4 per gaussian
     private GraphicsBuffer _contributionBuffer;   // uint per gaussian
@@ -54,36 +54,35 @@ public class SplatData : ScriptableObject
 
     public GraphicsBuffer DebugBuffer => _debugBuffer;
 
-    ComputeBuffer vertexBuffer;
-    ComputeBuffer colorAccumBuffer;
-    ComputeBuffer countBuffer;
-
     public int Count => Positions != null ? Positions.Length : 0;
 
+    //creates gaussians given points and gaussian size,
+    //does not assign final colour
     public void GaussiansFromCloud(
- Vector3[] verts,
- float gaussianSize)
+     Vector3[] verts,
+     float gaussianSize)
     {
+        //check if there are any positions and if buffers need to be initiated
         bool needsInit =
             Positions == null ||
             Positions.Length != verts.Length ||
             _positionsA == null;
 
-
+        //fill positions
         Positions = verts;
 
-
+        //if buffers dont need to be initialized, just update the positions and exit
         if (!needsInit)
         {
             UpdatePositionsOnly(verts);
             return;
         }
 
-
+        //create arrays for colour and axes using the number of vertices as the length
         Colors = new Color[verts.Length];
         Axes = new Vector3[verts.Length * 3];
 
-
+        //default the colours to black and set the gaussian size
         for (int i = 0; i < verts.Length; i++)
         {
             Colors[i] = Color.black;
@@ -100,11 +99,11 @@ public class SplatData : ScriptableObject
                 Vector3.forward * gaussianSize;
         }
 
-
+        //initialize buffers
         InitializeBuffers();
     }
 
-
+    //set accumulation back to black (zero)
     public void ResetAccumulation()
     {
         if (_accumColorBuffer == null || _contributionBuffer == null) return;
@@ -121,6 +120,7 @@ public class SplatData : ScriptableObject
     // =========================================================
     // BUFFERS
     // =========================================================
+    //initializes buffers
     public void InitializeBuffers()
     {
         Dispose();
@@ -149,7 +149,7 @@ public class SplatData : ScriptableObject
         _contributionBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(uint));
         _finalColorBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, sizeof(float) * 4);
         
-        // init arrays
+        //set accumulation colours to black (zero) to start
         Vector4[] zeroColors = new Vector4[count];
         uint[] zeroCounts = new uint[count];
 
@@ -181,6 +181,7 @@ public class SplatData : ScriptableObject
         );
     }
 
+    //set the position buffers
     public void UpdatePositionsOnly(Vector3[] p)
     {
         Positions = p;
@@ -191,6 +192,7 @@ public class SplatData : ScriptableObject
 
     public void UpdateColorsOnly(Color[] c)
     {
+        //if the colour buffers are null, empty them and create new ones
         if (_colorsA == null || _colorsA.count != c.Length)
         {
             Debug.Log($"Recreating color buffers. Old={_colorsA?.count} New={c.Length}");
@@ -211,10 +213,12 @@ public class SplatData : ScriptableObject
             );
         }
 
+        //fill the colour buffers
         _colorsA.SetData(c);
         _colorsB.SetData(c);
     }
 
+    //empties buffers
     public void Dispose()
     {
         _positionsA?.Dispose(); _positionsA = null;

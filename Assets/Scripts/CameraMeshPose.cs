@@ -11,15 +11,9 @@ public static class CameraMeshPose
         position = Vector3.zero;
         rotation = Quaternion.identity;
 
-        /*
-        if (mf == null || mf.sharedMesh == null)
-            return false;
-
-        Transform t = mf.transform;
-        Vector3[] verts = mf.sharedMesh.vertices;
-        */
         //--------------------------------------------------
-        // Build unique vertex set
+        // Build unique vertex set -
+        // there are normally 16 points overlapping in the same 5 positions, just want the 5 positions
         //--------------------------------------------------
 
         List<Vector3> unique = new List<Vector3>();
@@ -27,7 +21,6 @@ public static class CameraMeshPose
 
         foreach (Vector3 v in verts)
         {
-            //Vector3 w = t.TransformPoint(v);
             Vector3 w = v;
 
             bool exists = false;
@@ -51,7 +44,7 @@ public static class CameraMeshPose
         }
 
         //--------------------------------------------------
-        // Find tip
+        // Find tip of camera (base)
         //--------------------------------------------------
 
         int tipIndex = 0;

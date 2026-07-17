@@ -537,6 +537,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   menu: {fileID: 581085177}
+  startButton: {fileID: 1286519985}
   animator: {fileID: 916050661}
 --- !u!1 &558382798
 GameObject:
