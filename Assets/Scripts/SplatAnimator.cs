@@ -867,70 +867,72 @@ public class SplatAnimator : MonoBehaviour
         });
     }
 
+    //creates a depth map of the scene from a scene camera
     public void GenerateGaussianDepth(
     Camera cam,
     SplatData splatData,
     RenderTexture depthMinTexture,
     int cameraIndex)
     {
+        //find the write depth function in the compute shader
         int kernel = splatCompute.FindKernel("WriteDepth");
 
+        //set the depth texture render texture to depth min texture
         splatCompute.SetTexture(
             kernel,
             "DepthTexture",
             depthMinTexture
         );
-        /*
-        splatCompute.SetTexture(
-            kernel,
-            "_DA3DepthTex",
-            depthFrames[cameraIndex]
-        );
-        */
+        
+        //pass the gaussian positions to the compute shader
         splatCompute.SetBuffer(
             kernel,
             "_Positions",
             splatData.PositionsBuffer
         );
 
+        //pass the world to camera matrix of the current camera to the compute shader
         splatCompute.SetMatrix(
             "_WorldToCamera",
             cam.worldToCameraMatrix
         );
 
+        //set the render texture width
         splatCompute.SetInt(
             "TextureWidth",
             depthMinTexture.width
         );
 
-
+        //set the render texture height
         splatCompute.SetInt(
             "TextureHeight",
             depthMinTexture.height
         );
 
-        
-        Matrix4x4 vp =
-    GL.GetGPUProjectionMatrix(
-        cam.projectionMatrix,
-        true)
-    * cam.worldToCameraMatrix;
+        //matrix of world space to clip space 
+        //used to check if a gaussian is off screen
+        Matrix4x4 vp = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
 
+        //send the matrix to the compute shader
         splatCompute.SetMatrix(
             "_ViewProj",
             vp
         );
 
+        //send the debug buffer to the compute shader
         splatCompute.SetBuffer(
                 kernel,
                 "_DebugBuffer",
                 NextSplat.DebugBuffer
             );
 
+        //get the number of thread groups needed to generate all gaussians
+        //one thread group has 64 threads, one gaussian per thread
         int groups = Mathf.CeilToInt(
             splatData.Count / 64.0f
         );
 
+        //run the write depth function in teh compute shader
         splatCompute.Dispatch(
             kernel,
             groups,
@@ -939,30 +941,38 @@ public class SplatAnimator : MonoBehaviour
         );
     }
 
+    //fills the depth map with a very large value
     void ClearDepthMin(RenderTexture depthTexture)
     {
+        //find the clear depth function in the compute shader
         int kernel = splatCompute.FindKernel("ClearDepth");
 
+        //set the depth texture to the depth texture render texture
         splatCompute.SetTexture(
             kernel,
             "DepthTexture",
             depthTexture
         );
 
+        //set the render texture width
         splatCompute.SetInt(
             "TextureWidth",
             depthTexture.width
         );
 
+        //set the render texture height
         splatCompute.SetInt(
             "TextureHeight",
             depthTexture.height
         );
 
-
+        //calculate how many thread groups are needed across x and y of render texture
+        //one thread group has 8 x 8 grid, 64 threads, one pixel per thread
+        //essentially how many 8 x 8 grids are needed?
         int groupsX = Mathf.CeilToInt(depthTexture.width / 8f);
         int groupsY = Mathf.CeilToInt(depthTexture.height / 8f);
 
+        //run the clear depth function in the compute shader
         splatCompute.Dispatch(
             kernel,
             groupsX,
@@ -971,42 +981,48 @@ public class SplatAnimator : MonoBehaviour
         );
     }
 
+    //converts the nearest depth integer values from write depth to float depth values
+    //run gpu colouring samples float values
     void ConvertDepth(
     RenderTexture depthMinTexture,
     RenderTexture depthFloatTexture)
     {
+        //find the convert depth function in the compute shader
         int kernel = splatCompute.FindKernel("ConvertDepth");
 
-
+        //set the depth int texture to the depth min texture
         splatCompute.SetTexture(
             kernel,
             "DepthIntTexture",
             depthMinTexture
         );
 
-
+        //set the depth float texture to the depth float texture
         splatCompute.SetTexture(
             kernel,
             "DepthFloatTexture",
             depthFloatTexture
         );
 
-
+        //set the render texture width
         splatCompute.SetInt(
             "TextureWidth",
             depthFloatTexture.width
         );
 
+        //set the render texture height
         splatCompute.SetInt(
             "TextureHeight",
             depthFloatTexture.height
         );
 
-
+        //calculate how many thread groups are needed across x and y of render texture
+        //one thread group has 8 x 8 grid, 64 threads, one pixel per thread
+        //essentially how many 8 x 8 grids are needed?
         int groupsX = Mathf.CeilToInt(depthFloatTexture.width / 8f);
         int groupsY = Mathf.CeilToInt(depthFloatTexture.height / 8f);
 
-
+        //run the convert depth function in the compute shader
         splatCompute.Dispatch(
             kernel,
             groupsX,
