@@ -12,7 +12,7 @@ public class PointCloudDebug : MonoBehaviour
 
         Vector3[] verts = mf.sharedMesh.vertices;
 
-        //set teh colour to green
+        //set the colour to green
         Gizmos.color = Color.green;
 
         int step = Mathf.Max(1, verts.Length / 5000);

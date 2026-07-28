@@ -264,11 +264,11 @@ public class SplatAnimator : MonoBehaviour
         //----------------------------------------------------
         // Zero out transforms on splat
         //----------------------------------------------------
-
+        
         splatRoot.position = Vector3.zero;
         splatRoot.rotation = Quaternion.identity;
         splatRoot.localScale = Vector3.one;
-
+        
 
         //----------------------------------------------------
         // Load colour images
@@ -446,14 +446,6 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     void CreateCamerasFromDataset()
     {
-        //get the camera folders for the current frame
-        string[] camFolders = Directory.GetDirectories(FileSelector.frameFolders[currentFrame])
-            .OrderBy(f => f)
-            .ToArray();
-
-        //num cameras is equal to teh number of camera folders
-        numCameras = camFolders.Length;
-
         //initialize arrays
         renderCameras = new Camera[numCameras];
         depthMaps = new RenderTexture[numCameras];
@@ -509,8 +501,8 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[i].transform.rotation = rot;
             }
         }
-    }
 
+    }
 
     // -------------------------------------------------------------------------
     // 4. Apply transform matrix between ref cam and current cam to current cam

@@ -8,6 +8,8 @@ public class DA3CameraImporter : MonoBehaviour
     public Camera[] cameras;
 
     [Header("Intrinsics")]
+    public int imageWidthPublic;
+    public int imageHeightPublic;
     public static int imageWidth = 504;
     public static int imageHeight = 448;
 
@@ -17,6 +19,20 @@ public class DA3CameraImporter : MonoBehaviour
 
     public SplatAnimator animator;
 
+    // -----------------------------
+    // ASSIGN IMAGE DIMENSIONS  
+    // -----------------------------
+    private void OnValidate()
+    {
+        imageWidth = imageWidthPublic; // Updates static int when you change it in the inspector
+        imageHeight = imageHeightPublic;
+    }
+
+    private void Awake()
+    {
+        imageWidth = imageWidthPublic; // Ensures it is set when the game starts
+        imageHeight = imageHeightPublic;
+    }
 
     // -----------------------------
     // INIT
