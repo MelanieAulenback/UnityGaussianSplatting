@@ -42,29 +42,54 @@ public static class CameraMeshPose
             Debug.LogError($"Expected 5 unique vertices, found {unique.Count}");
             return false;
         }
-
+        //DebugUniqueVertices(unique);
         //--------------------------------------------------
-        // Find tip of camera (base)
+        // Find tip of camera by coplanarity
         //--------------------------------------------------
 
-        int tipIndex = 0;
-        float best = -1f;
+        const float coplanarTolerance = 1e-4f;
 
-        for (int i = 0; i < unique.Count; i++)
+        int tipIndex = -1;
+
+        for (int candidate = 0; candidate < unique.Count; candidate++)
         {
-            float sum = 0f;
+            // Collect the other four points
+            List<Vector3> others = new List<Vector3>();
 
-            for (int j = 0; j < unique.Count; j++)
+            for (int i = 0; i < unique.Count; i++)
             {
-                if (i == j) continue;
-                sum += Vector3.Distance(unique[i], unique[j]);
+                if (i != candidate)
+                    others.Add(unique[i]);
             }
 
-            if (sum > best)
+            // Plane defined by first three points
+            Vector3 a = others[0];
+            Vector3 b = others[1];
+            Vector3 c = others[2];
+            Vector3 d = others[3];
+
+            Vector3 normal = Vector3.Cross(b - a, c - a);
+
+            // Degenerate plane
+            if (normal.sqrMagnitude < 1e-8f)
+                continue;
+
+            normal.Normalize();
+
+            // Distance of 4th point from the plane
+            float distance = Mathf.Abs(Vector3.Dot(d - a, normal));
+
+            if (distance < coplanarTolerance)
             {
-                best = sum;
-                tipIndex = i;
+                tipIndex = candidate;
+                break;
             }
+        }
+
+        if (tipIndex == -1)
+        {
+            Debug.LogError("Could not determine camera tip.");
+            return false;
         }
 
         Vector3 tip = unique[tipIndex];
@@ -172,5 +197,53 @@ public static class CameraMeshPose
         rotation = Quaternion.LookRotation(forward, up);
 
         return true;
+    }
+    private static void DebugUniqueVertices(List<Vector3> unique)
+    {
+        Color[] vertexColors =
+        {
+        Color.red,       // unique 0
+        Color.green,     // unique 1
+        Color.blue,      // unique 2
+        Color.magenta,   // unique 3
+        Color.yellow     // unique 4
+    };
+
+        for (int i = 0; i < unique.Count; i++)
+        {
+            GameObject sphere = GameObject.CreatePrimitive(
+                PrimitiveType.Sphere
+            );
+
+            sphere.name = $"UniqueVertex_{i}";
+
+            // Mirror only for visualization
+            Vector3 debugPos = unique[i];
+            debugPos.x *= -1;
+
+            sphere.transform.position = debugPos;
+            sphere.transform.localScale = Vector3.one * 0.05f;
+
+            Renderer renderer = sphere.GetComponent<Renderer>();
+
+            if (renderer != null)
+            {
+                Material mat = new Material(
+                    Shader.Find("Universal Render Pipeline/Lit")
+                );
+
+                mat.color = vertexColors[i];
+                renderer.material = mat;
+            }
+
+            Collider col = sphere.GetComponent<Collider>();
+            if (col != null)
+                Object.Destroy(col);
+
+
+            Debug.Log(
+                $"Unique Vertex {i}: Original={unique[i]}, Mirrored={debugPos}"
+            );
+        }
     }
 }

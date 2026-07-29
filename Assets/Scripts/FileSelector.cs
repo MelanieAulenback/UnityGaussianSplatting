@@ -53,12 +53,21 @@ public class FileSelector : MonoBehaviour
 
         for (int i = 0; i < camFolders.Length; i++)
         {
+            
+            animator.colorFrames[i] =
+                new Texture2D(
+                    3840,
+                    2160,
+                    TextureFormat.RGBA32,
+                    false);
+            /*
             animator.colorFrames[i] =
                 new Texture2D(
                     1080,
                     958,
                     TextureFormat.RGBA32,
                     false);
+            */
         }
 
         //create array of depth map textures

@@ -563,7 +563,9 @@ public class SplatAnimator : MonoBehaviour
 
         //attach cameras to root
         foreach (var cam in renderCameras)
+        {
             cam.transform.SetParent(reconstructionRoot, false);
+        }
 
         //flip x position to removed mirroring
         Vector3 scaleX = new Vector3(-1, 1, 1);
