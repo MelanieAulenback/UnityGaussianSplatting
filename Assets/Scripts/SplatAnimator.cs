@@ -43,7 +43,7 @@ public class SplatAnimator : MonoBehaviour
 
     public float targetSceneSize = 10f;
     float currentScale = 1.0f;
-    float gaussianSize;
+    public float gaussianSize;
 
     bool colourReady = false;
     bool callNextFrame = false;
@@ -73,7 +73,7 @@ public class SplatAnimator : MonoBehaviour
     private void Start()
     {
         //scale gaussian size depending on scene size
-        gaussianSize = 0.01f / targetSceneSize;
+        gaussianSize = gaussianSize / targetSceneSize;
     }
 
     // =====================================================
@@ -729,6 +729,12 @@ public class SplatAnimator : MonoBehaviour
 
 
             splatCompute.SetMatrix("_ViewProj", vp);
+
+            //pass the world to camera matrix
+            splatCompute.SetMatrix(
+                "_WorldToCamera",
+                renderCameras[cam].worldToCameraMatrix
+            );
 
             //supply the gaussian positions
             splatCompute.SetBuffer(

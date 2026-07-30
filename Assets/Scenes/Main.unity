@@ -1382,6 +1382,7 @@ MonoBehaviour:
   frameCount: 0
   currentFrame: 0
   targetSceneSize: 10
+  gaussianSize: 0.03
   splatBuffers:
   - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
   - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}

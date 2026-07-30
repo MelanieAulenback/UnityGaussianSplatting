@@ -90,13 +90,24 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
 
     float depthFromMap = _DepthTex.Load(int3(pixel, 0));
     
+    /*
     const float depthTolerance = 0.5; // 2 cm
     
     if (gaussianDepth > depthFromMap + depthTolerance)
     {
         return;
     }
+    */
     
+    const float frontTolerance = 0.015;
+    const float backTolerance = 0.025;
+
+    float delta = gaussianDepth - depthFromMap;
+
+    if (delta < -frontTolerance || delta > backTolerance)
+    {
+        return;
+    }
    
     if (id < 10)
     {
@@ -131,15 +142,42 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     colorPixel.x = min(colorPixel.x, ColorTextureWidth - 1);
     colorPixel.y = min(colorPixel.y, ColorTextureHeight - 1);
 
-
-
+    /*
     float4 color = _ColorTex.Load(
         int3(colorPixel, 0)
     );
 
         _AccumColor[id] = color;
         _Contribution[id] = 1;
+    */
     
+    float4 color = _ColorTex.Load(int3(colorPixel, 0));
+
+    float depthError = abs(delta);
+
+// Distance from image centre (0 = centre, ~1.4 = corner)
+    float2 centred = uv * 2.0 - 1.0;
+    float radial = length(centred);
+
+// Distance from nearest image edge
+    float border = min(
+    min(uv.x, uv.y),
+    min(1.0 - uv.x, 1.0 - uv.y)
+);
+
+// Lower score is better
+    float score =
+      depthError * 150.0
+    + radial * 3.0
+    + (1.0 - border) * 2.0;
+
+// Only replace the current camera if it's noticeably better
+    if (score < _BestCameraScore[id] - 0.1)
+    {
+        _BestCameraScore[id] = score;
+        _AccumColor[id] = color;
+        _Contribution[id] = 1;
+    }
 }
 
 

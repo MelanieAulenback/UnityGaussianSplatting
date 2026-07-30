@@ -69,12 +69,52 @@ public class DA3CameraImporter : MonoBehaviour
         // -----------------------------
         // INTRINSICS (unchanged)
         // -----------------------------
+        /*
         float fx = intrinsics[i, 0, 0];
         float fy = intrinsics[i, 1, 1];
         float cx = intrinsics[i, 0, 2];
         float cy = intrinsics[i, 1, 2];
 
         ApplyIntrinsics(cam, fx, fy, cx, cy, imageWidth, imageHeight);
+        */
+
+        float fx = intrinsics[i, 0, 0];
+        float fy = intrinsics[i, 1, 1];
+        float cx = intrinsics[i, 0, 2];
+        float cy = intrinsics[i, 1, 2];
+
+
+        // DA3 depth resolution
+        float daWidth = imageWidth;
+        float daHeight = imageHeight;
+
+
+        // Colour image resolution
+        float colorWidth = 3840f;
+        float colorHeight = 2160f;
+
+
+        // Scale intrinsics into colour image space
+        float scaleX = colorWidth / daWidth;
+        float scaleY = colorHeight / daHeight;
+
+
+        fx *= scaleX;
+        fy *= scaleY;
+        cx *= scaleX;
+        cy *= scaleY;
+
+
+        // Build projection for colour camera
+        ApplyIntrinsics(
+            cam,
+            fx,
+            fy,
+            cx,
+            cy,
+            (int)colorWidth,
+            (int)colorHeight
+        );
     }
 
     // -----------------------------
