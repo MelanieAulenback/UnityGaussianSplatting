@@ -33,6 +33,23 @@ public class SplatAnimator : MonoBehaviour
     public RenderTexture[] depthMaps;
     public RenderTexture[] depthMinMaps;
 
+    [Header("Environment")]
+    public SplatData envSplat;
+    public Transform envSplatRoot;
+    public Transform envReconstructionRoot;
+
+    private Vector3[] environmentPoints;
+    private Vector3[][] environmentCameraVertices;
+
+    public Texture2D[] environmentColorFrames;
+
+    private int environmentCameraCount;
+
+    public Camera[] envCameras;
+
+    private RenderTexture[] environmentDepthMaps;
+    private RenderTexture[] environmentDepthMinMaps;
+
     [Header("Counts")]
     public int numCameras;
 
@@ -44,6 +61,7 @@ public class SplatAnimator : MonoBehaviour
     public float targetSceneSize = 10f;
     float currentScale = 1.0f;
     public float gaussianSize;
+    public float envGaussianSize;
 
     bool colourReady = false;
     bool callNextFrame = false;
@@ -74,6 +92,7 @@ public class SplatAnimator : MonoBehaviour
     {
         //scale gaussian size depending on scene size
         gaussianSize = gaussianSize / targetSceneSize;
+        envGaussianSize = envGaussianSize / targetSceneSize;
     }
 
     // =====================================================
@@ -107,6 +126,9 @@ public class SplatAnimator : MonoBehaviour
     //starts the playback of frames
     public async void StartPlayback()
     {
+        //create/load static environment
+        InitializeEnvironment();
+
         //initialize the scene
         InitializeScene();
 
@@ -162,8 +184,14 @@ public class SplatAnimator : MonoBehaviour
         }
 
         //colour the splat
-        RunGPUColouring(NextSplat);
-
+        RunGPUColouring(
+            NextSplat,
+            renderCameras,
+            colorFrames,
+            depthMaps,
+            numCameras,
+            false
+        );
         //give ability to call next frame
         callNextFrame = true;
     }
@@ -231,7 +259,15 @@ public class SplatAnimator : MonoBehaviour
 
 
         //colour the gaussians
-        RunGPUColouring(NextSplat);
+        RunGPUColouring(
+            NextSplat,
+            renderCameras,
+            colorFrames,
+            depthMaps,
+            numCameras,
+            false
+        );
+        
         /*
         UnityEngine.Debug.Log(
             $"Frame generation time: {sw.ElapsedMilliseconds} ms " +
@@ -296,9 +332,9 @@ public class SplatAnimator : MonoBehaviour
         // Update camera poses
         //----------------------------------------------------
 
-        importer.ApplyCameras();
+        importer.ApplyCameras(FileSelector.colorWidth, FileSelector.colorHeight);
 
-        SetCamPositions(glbCameras);
+        SetCamPositions(renderCameras, glbCameras);
 
         //get the camera transforms for frame 0
         if (currentFrame == 0)
@@ -392,10 +428,13 @@ public class SplatAnimator : MonoBehaviour
             rotationScale;
 
         //apply transforms to cameras
-        ApplyCameraTransform();
+        ApplyCameraTransform(renderCameras);
 
         //parent splat and cameras to reconstruction root
-        AttachToRoot();
+        AttachToRoot(
+            splatRoot,
+            renderCameras
+        );
 
         //preload next frame
         int preloadFrame = (currentFrame + CACHE_SIZE) % frameCount;
@@ -416,6 +455,177 @@ public class SplatAnimator : MonoBehaviour
     }
 
     // =====================================================
+    // INITIALIZE ENVIRONMENT
+    // =====================================================
+
+    public void InitializeEnvironment()
+    {
+        string environmentFolder =
+            Path.Combine(FileSelector.datasetRoot, "Environment");
+
+        string pointsPath =
+            Path.Combine(environmentFolder, "points.bin");
+
+        string camerasPath =
+            Path.Combine(environmentFolder, "cameras.bin");
+
+        string colourFolder =
+            Path.Combine(environmentFolder, "Colour");
+
+        if (!File.Exists(pointsPath))
+        {
+            UnityEngine.Debug.LogError(
+                "Environment points.bin not found!"
+            );
+            return;
+        }
+
+        if (!File.Exists(camerasPath))
+        {
+            UnityEngine.Debug.LogError(
+                "Environment cameras.bin not found!"
+            );
+            return;
+        }
+
+        if (!Directory.Exists(colourFolder))
+        {
+            UnityEngine.Debug.LogError(
+                "Environment Colour folder not found!"
+            );
+            return;
+        }
+
+        // -------------------------------------------------
+        // Load environment geometry
+        // -------------------------------------------------
+
+        environmentPoints =
+            LoadVertices(pointsPath);
+
+        environmentCameraVertices =
+            LoadCameraVertices(camerasPath);
+
+        environmentCameraCount =
+            environmentCameraVertices.Length;
+
+        UnityEngine.Debug.Log(
+            $"Environment loaded: " +
+            $"{environmentPoints.Length} points, " +
+            $"{environmentCameraCount} cameras"
+        );
+
+        // -------------------------------------------------
+        // Create environment colour textures
+        // -------------------------------------------------
+
+        environmentColorFrames =
+            new Texture2D[environmentCameraCount];
+
+        for (int i = 0; i < environmentCameraCount; i++)
+        {
+            environmentColorFrames[i] =
+                new Texture2D(
+                    FileSelector.colorWidthEnv,
+                    FileSelector.colorHeightEnv,
+                    TextureFormat.RGBA32,
+                    false
+                );
+
+            string file =
+                Path.Combine(
+                    colourFolder,
+                    $"{i:000000}.rgba"
+                );
+
+            if (!File.Exists(file))
+            {
+                UnityEngine.Debug.LogError(
+                    $"Missing environment colour image: {file}"
+                );
+
+                continue;
+            }
+
+            byte[] bytes =
+                File.ReadAllBytes(file);
+
+            environmentColorFrames[i]
+                .LoadRawTextureData(bytes);
+
+            environmentColorFrames[i].Apply(false);
+        }
+
+        UnityEngine.Debug.Log(
+            "Environment colour images loaded."
+        );
+
+        // -------------------------------------------------
+        // Generate environment Gaussian splat
+        // -------------------------------------------------
+
+        envSplat.GaussiansFromCloud(
+            environmentPoints,
+            envGaussianSize
+        );
+
+        UnityEngine.Debug.Log(
+            "Environment Gaussians generated."
+        );
+
+        CreateCamerasFromDataset(
+            environmentCameraCount,
+            ref envCameras,
+            ref environmentDepthMaps,
+            ref environmentDepthMinMaps
+        );
+
+        // Tell importer to operate on environment cameras
+        importer.cameras = envCameras;
+
+        // Load environment intrinsics/extrinsics
+        importer.InitializeCameras(environmentFolder);
+
+        // Apply environment intrinsics
+        importer.ApplyCameras(FileSelector.colorWidthEnv, FileSelector.colorHeightEnv);
+
+        SetCamPositions(envCameras, environmentCameraVertices);
+
+        // Apply GoPro / coordinate-system correction
+        //ApplyCameraTransform(envCameras);
+
+        //AttachEnvironmentToRoot(envSplatRoot, envCameras);
+
+        for (int i = 0; i < environmentCameraCount; i++)
+        {
+            ClearDepthMin(environmentDepthMinMaps[i]);
+
+            GenerateGaussianDepth(
+                envCameras[i],
+                envSplat,
+                environmentDepthMinMaps[i],
+                i
+            );
+
+            ConvertDepth(
+                environmentDepthMinMaps[i],
+                environmentDepthMaps[i]
+            );
+        }
+
+        RunGPUColouring(
+            envSplat,
+            envCameras,
+            environmentColorFrames,
+            environmentDepthMaps,
+            environmentCameraCount,
+            true
+        );
+        AttachEnvironmentToRoot(envSplatRoot, envCameras);
+    }
+
+
+    // =====================================================
     // 1. INIT FROM POINT CLOUDS + DATASET
     // =====================================================
     public void InitializeScene()
@@ -431,10 +641,15 @@ public class SplatAnimator : MonoBehaviour
         }
 
         //create the cameras
-        CreateCamerasFromDataset();
+        CreateCamerasFromDataset(
+                numCameras,
+                ref renderCameras,
+                ref depthMaps,
+                ref depthMinMaps
+            );
 
         //set camera intrinsics
-        importer.InitializeCameras();
+        importer.InitializeCameras(FileSelector.frameFolders[currentFrame]);
 
         //assign render cameras to importer cameras for consistency
         importer.cameras = renderCameras;
@@ -444,22 +659,22 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     // 2. Create Unity cameras from dataset count
     // -----------------------------------------------------
-    void CreateCamerasFromDataset()
+    void CreateCamerasFromDataset(int cameraCount, ref Camera[] cameras, ref RenderTexture[] depthMaps, ref RenderTexture[] depthMinMaps)
     {
         //initialize arrays
-        renderCameras = new Camera[numCameras];
-        depthMaps = new RenderTexture[numCameras];
-        depthMinMaps = new RenderTexture[numCameras];
+        cameras = new Camera[cameraCount];
+        depthMaps = new RenderTexture[cameraCount];
+        depthMinMaps = new RenderTexture[cameraCount];
 
         //for the number of cameras
-        for (int i = 0; i < numCameras; i++)
+        for (int i = 0; i < cameraCount; i++)
         {
             //create a camera
             GameObject camObj = new GameObject($"RenderCam_{i:000}");
             Camera cam = camObj.AddComponent<Camera>();
 
             //add it to the render cameras array
-            renderCameras[i] = cam;
+            cameras[i] = cam;
 
             //create a depth map for the current camera
             depthMaps[i] = new RenderTexture(
@@ -488,17 +703,17 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     // 3. Set camera positions from camera point clouds
     // -----------------------------------------------------
-    public void SetCamPositions(Vector3[][] cameraVertices)
+    public void SetCamPositions(Camera[] cameras, Vector3[][] cameraVertices)
     {
-        for (int i = 0; i < renderCameras.Length; i++)
+        for (int i = 0; i < cameras.Length; i++)
         {
             if (CameraMeshPose.TryGetPose(
                     cameraVertices[i],
                     out Vector3 pos,
                     out Quaternion rot))
             {
-                renderCameras[i].transform.position = pos;
-                renderCameras[i].transform.rotation = rot;
+                cameras[i].transform.position = pos;
+                cameras[i].transform.rotation = rot;
             }
         }
 
@@ -507,21 +722,21 @@ public class SplatAnimator : MonoBehaviour
     // -------------------------------------------------------------------------
     // 4. Apply transform matrix between ref cam and current cam to current cam
     // -------------------------------------------------------------------------
-    void ApplyCameraTransform()
+    void ApplyCameraTransform(Camera[] cameras)
     {
-        for (int i = 0; i < numCameras; i++)
+        for (int i = 0; i < cameras.Length; i++)
         {
             Vector3 oldPos =
-                renderCameras[i].transform.position;
+                cameras[i].transform.position;
 
 
             Quaternion oldRot =
-                renderCameras[i].transform.rotation;
+                cameras[i].transform.rotation;
 
 
             Vector3 newPos =
                 reconstructionMatrix.MultiplyPoint3x4(
-                    renderCameras[i].transform.position);
+                    cameras[i].transform.position);
 
             Vector3 forward =
                 reconstructionMatrix
@@ -535,11 +750,11 @@ public class SplatAnimator : MonoBehaviour
                     oldRot * Vector3.up);
 
 
-            renderCameras[i].transform.position =
+            cameras[i].transform.position =
                 newPos;
 
 
-            renderCameras[i].transform.rotation =
+            cameras[i].transform.rotation =
                 Quaternion.LookRotation(
                     forward,
                     up);
@@ -549,7 +764,7 @@ public class SplatAnimator : MonoBehaviour
     // -----------------------------------------------------
     // 5. Attach splat and cameras to root
     // -----------------------------------------------------
-    void AttachToRoot()
+    void AttachToRoot(Transform splatTransform, Camera[] cameras)
     {
         //create the reconstruction root object if it doesnt already exist
         if (reconstructionRoot == null)
@@ -559,10 +774,10 @@ public class SplatAnimator : MonoBehaviour
         }
 
         //attach splat to root
-        splatRoot.SetParent(reconstructionRoot, false);
+        splatTransform.SetParent(reconstructionRoot, false);
 
         //attach cameras to root
-        foreach (var cam in renderCameras)
+        foreach (var cam in cameras)
         {
             cam.transform.SetParent(reconstructionRoot, false);
         }
@@ -572,6 +787,39 @@ public class SplatAnimator : MonoBehaviour
         reconstructionRoot.localScale = scaleX * targetSceneSize;
     }
 
+    void AttachEnvironmentToRoot(
+    Transform splatTransform,
+    Camera[] cameras)
+    {
+        if (envReconstructionRoot == null)
+        {
+            GameObject root = new GameObject("EnvironmentReconstructionRoot");
+            envReconstructionRoot = root.transform;
+        }
+
+        // Attach environment splat
+        splatTransform.SetParent(
+            envReconstructionRoot,
+            false
+        );
+
+        // Attach environment cameras
+        foreach (Camera cam in cameras)
+        {
+            cam.transform.SetParent(
+                envReconstructionRoot,
+                false
+            );
+        }
+
+        // Same coordinate-system correction and scale
+        envReconstructionRoot.localScale =
+            new Vector3(
+                -targetSceneSize,
+                 targetSceneSize,
+                 targetSceneSize
+            );
+    }
     // =====================================================
     // LOAD VERTICES FROM POINT CLOUD FILES
     // =====================================================
@@ -648,7 +896,12 @@ public class SplatAnimator : MonoBehaviour
     // =====================================================
     // COLOUR GAUSSIANS + CREATE DEPTH MAP
     // =====================================================
-    public void RunGPUColouring(SplatData targetSplat)
+    public void RunGPUColouring(SplatData targetSplat,
+        Camera[] cameras,
+        Texture2D[] colourImages,
+        RenderTexture[] targetDepthMaps,
+        int cameraCount,
+        bool isEnvironment = false)
     {
         //get the number of gaussians that need to be coloured
         int count = targetSplat.Count;
@@ -662,7 +915,8 @@ public class SplatAnimator : MonoBehaviour
         int requestedFrame = currentFrame;
 
         //mark colouring as still in progress
-        colourReady = false;
+        if (!isEnvironment)
+            colourReady = false;
 
         //clear any accumulated colours and contribution counts
         //from the previous colouring pass
@@ -687,10 +941,12 @@ public class SplatAnimator : MonoBehaviour
         // Project every camera onto the gaussians
         //-------------------------------------------------------
 
-        for (int cam = 0; cam < numCameras; cam++)
+        for (int cam = 0; cam < cameraCount; cam++)
         {
             //get this camera's colour image
-            Texture2D image = colorFrames[cam];
+            Camera camera = cameras[cam];
+            Texture2D image = colourImages[cam];
+            RenderTexture depth = targetDepthMaps[cam];
 
             //tell the compute shader how many gaussians to process
             splatCompute.SetInt("_GaussianCount", count);
@@ -707,8 +963,8 @@ public class SplatAnimator : MonoBehaviour
             );
 
             //pass the depth texture dimensions
-            splatCompute.SetInt("TextureWidth", depthMaps[cam].width);
-            splatCompute.SetInt("TextureHeight", depthMaps[cam].height);
+            splatCompute.SetInt("TextureWidth", depth.width);
+            splatCompute.SetInt("TextureHeight", depth.height);
 
             //buffer storing the best camera score for each gaussian
             splatCompute.SetBuffer(
@@ -722,10 +978,10 @@ public class SplatAnimator : MonoBehaviour
             //the camera's screen coordinates
             Matrix4x4 vp =
                 GL.GetGPUProjectionMatrix(
-                    renderCameras[cam].projectionMatrix,
+                    camera.projectionMatrix,
                     true)
                 *
-                renderCameras[cam].worldToCameraMatrix;
+                camera.worldToCameraMatrix;
 
 
             splatCompute.SetMatrix("_ViewProj", vp);
@@ -733,7 +989,7 @@ public class SplatAnimator : MonoBehaviour
             //pass the world to camera matrix
             splatCompute.SetMatrix(
                 "_WorldToCamera",
-                renderCameras[cam].worldToCameraMatrix
+                camera.worldToCameraMatrix
             );
 
             //supply the gaussian positions
@@ -775,7 +1031,7 @@ public class SplatAnimator : MonoBehaviour
             splatCompute.SetTexture(
                 kernel,
                 "_DepthTex",
-                 depthMaps[cam]
+                 depth
             );
 
             //calculate how many thread groups are needed
@@ -859,11 +1115,20 @@ public class SplatAnimator : MonoBehaviour
             targetSplat.Colors = colors;
             targetSplat.UpdateColorsOnly(colors);
 
-            //colouring has finished
-            colourReady = true;
+            if (!isEnvironment)
+            {
+                //colouring has finished
+                colourReady = true;
+                //make the newly coloured splat the active one
+                SwapSplats();
+            }
+            else
+            {
+                UnityEngine.Debug.Log(
+                    "Environment colouring complete."
+                );
+            }
 
-            //make the newly coloured splat the active one
-            SwapSplats();
         });
     }
 
@@ -923,7 +1188,7 @@ public class SplatAnimator : MonoBehaviour
         splatCompute.SetBuffer(
                 kernel,
                 "_DebugBuffer",
-                NextSplat.DebugBuffer
+                splatData.DebugBuffer
             );
 
         //get the number of thread groups needed to generate all gaussians

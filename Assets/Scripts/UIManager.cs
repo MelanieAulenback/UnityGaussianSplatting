@@ -24,13 +24,24 @@ public class UIManager : MonoBehaviour
         //if the menu's not visible, allow mouse to act as player's view and disable render cam
         if (menu.enabled == false)
         {
-            renderCams = animator.renderCameras;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
 
-            for (int i = 0; i < renderCams.Length; i++)
+            if (animator.renderCameras != null)
             {
-                renderCams[i].enabled = false;
+                foreach (Camera cam in animator.renderCameras)
+                {
+                    if (cam != null)
+                        cam.enabled = false;
+                }
+            }
+            if (animator.envCameras != null)
+            {
+                foreach (Camera cam in animator.envCameras)
+                {
+                    if (cam != null)
+                        cam.enabled = false;
+                }
             }
         }
         //if menu's enabled, allow mouse to interact

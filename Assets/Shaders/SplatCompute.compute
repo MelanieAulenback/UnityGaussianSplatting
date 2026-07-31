@@ -153,6 +153,9 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     
     float4 color = _ColorTex.Load(int3(colorPixel, 0));
 
+    if (color.a <= 0.0)
+        return;
+    
     float depthError = abs(delta);
 
 // Distance from image centre (0 = centre, ~1.4 = corner)
@@ -194,7 +197,8 @@ void FinalizeColours(uint id : SV_DispatchThreadID)
 
     if (count == 0)
     {
-        _FinalColor[id] = float4(0, 0, 0, 1);
+        _FinalColor[id] = float4(0, 0, 0, 0);
+        return;
     }
     else
     {

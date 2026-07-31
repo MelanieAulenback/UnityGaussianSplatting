@@ -37,10 +37,8 @@ public class DA3CameraImporter : MonoBehaviour
     // -----------------------------
     // INIT
     // -----------------------------
-    public void InitializeCameras()
+    public void InitializeCameras(string frameFolder)
     {
-        string frameFolder = FileSelector.frameFolders[animator.currentFrame];
-
         string extrinsicsPath = Path.Combine(frameFolder, "extrinsics.npy");
         string intrinsicsPath = Path.Combine(frameFolder, "intrinsics.npy");
 
@@ -51,52 +49,37 @@ public class DA3CameraImporter : MonoBehaviour
     // -----------------------------
     // APPLY ALL CAMERAS
     // -----------------------------
-    public void ApplyCameras()
+    public void ApplyCameras(int width, int height)
     {
         int count = Mathf.Min(cameras.Length, extrinsics.GetLength(0));
 
         for (int i = 0; i < count; i++)
-            ApplyCamera(i);
+            ApplyCamera(i, width, height);
     }
 
     // -----------------------------
     // CORE - just applies intrinsics to the current cam
     // -----------------------------
-    public void ApplyCamera(int i)
+    public void ApplyCamera(int i, int width, int height)
     {
         Camera cam = cameras[i];
 
         // -----------------------------
         // INTRINSICS (unchanged)
         // -----------------------------
-        /*
-        float fx = intrinsics[i, 0, 0];
-        float fy = intrinsics[i, 1, 1];
-        float cx = intrinsics[i, 0, 2];
-        float cy = intrinsics[i, 1, 2];
-
-        ApplyIntrinsics(cam, fx, fy, cx, cy, imageWidth, imageHeight);
-        */
 
         float fx = intrinsics[i, 0, 0];
         float fy = intrinsics[i, 1, 1];
         float cx = intrinsics[i, 0, 2];
         float cy = intrinsics[i, 1, 2];
-
 
         // DA3 depth resolution
         float daWidth = imageWidth;
         float daHeight = imageHeight;
 
-
-        // Colour image resolution
-        float colorWidth = 3840f;
-        float colorHeight = 2160f;
-
-
         // Scale intrinsics into colour image space
-        float scaleX = colorWidth / daWidth;
-        float scaleY = colorHeight / daHeight;
+        float scaleX = width / daWidth;
+        float scaleY = height / daHeight;
 
 
         fx *= scaleX;
@@ -112,8 +95,8 @@ public class DA3CameraImporter : MonoBehaviour
             fy,
             cx,
             cy,
-            (int)colorWidth,
-            (int)colorHeight
+            (int)width,
+            (int)height
         );
     }
 

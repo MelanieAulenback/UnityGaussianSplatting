@@ -85,7 +85,7 @@ public class SplatData : ScriptableObject
         //default the colours to black and set the gaussian size
         for (int i = 0; i < verts.Length; i++)
         {
-            Colors[i] = Color.black;
+            Colors[i] = new Color(0, 0, 0, 0);
 
             int a = i * 3;
 

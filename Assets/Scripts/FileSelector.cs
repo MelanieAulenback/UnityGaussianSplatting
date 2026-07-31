@@ -12,6 +12,12 @@ public class FileSelector : MonoBehaviour
     public static string datasetRoot;
     public static string[] frameFolders;
 
+    public static int colorWidth = 3840;
+    public static int colorHeight = 2160;
+
+    public static int colorWidthEnv = 5568;
+    public static int colorHeightEnv = 4872;
+
     //sets up the database, loads folders, counts frames and cameras
     public void SelectDataset()
     {
@@ -27,8 +33,29 @@ public class FileSelector : MonoBehaviour
 
         datasetRoot = paths[0];
 
+        // --------------------------------------------------
+        // Find Frames folder
+        // --------------------------------------------------
+
+        string framesPath = Path.Combine(
+            datasetRoot,
+            "Frames"
+        );
+
+        if (!Directory.Exists(framesPath))
+        {
+            Debug.LogError(
+                $"Frames folder not found: {framesPath}"
+            );
+            return;
+        }
+
+        // --------------------------------------------------
+        // Get frame folders
+        // --------------------------------------------------
+
         //get the frame folders
-        frameFolders = Directory.GetDirectories(datasetRoot)
+        frameFolders = Directory.GetDirectories(framesPath)
         .OrderBy(f => f)
         .ToArray();
 
@@ -37,6 +64,10 @@ public class FileSelector : MonoBehaviour
             Debug.LogError("No frame folders found!");
             return;
         }
+
+        // --------------------------------------------------
+        // Get cameras from first frame
+        // --------------------------------------------------
 
         //get the camera folders
         string camerasPath = Path.Combine(frameFolders[0], "Cameras");
@@ -48,6 +79,10 @@ public class FileSelector : MonoBehaviour
         animator.numCameras = camFolders.Length;
         animator.frameCount = frameFolders.Length;
 
+        // --------------------------------------------------
+        // Create colour and depth textures
+        // --------------------------------------------------
+
         //create array of colour image textures
         animator.colorFrames = new Texture2D[camFolders.Length];
 
@@ -56,22 +91,19 @@ public class FileSelector : MonoBehaviour
             
             animator.colorFrames[i] =
                 new Texture2D(
-                    3840,
-                    2160,
+                    colorWidth,
+                    colorHeight,
                     TextureFormat.RGBA32,
                     false);
-            /*
-            animator.colorFrames[i] =
-                new Texture2D(
-                    1080,
-                    958,
-                    TextureFormat.RGBA32,
-                    false);
-            */
+
         }
 
         //create array of depth map textures
         animator.depthMaps = new RenderTexture[camFolders.Length];
+
+        // --------------------------------------------------
+        // Load first frame's colour images
+        // --------------------------------------------------
 
         //ONLY LOAD DATA (colour images) — DO NOT START PLAYBACK
         for (int i = 0; i < camFolders.Length; i++)
@@ -87,6 +119,32 @@ public class FileSelector : MonoBehaviour
 
             LoadSingleImage(colourPath, i, animator.colorFrames[i]);
         }
+
+        // --------------------------------------------------
+        // Environment is separate
+        // --------------------------------------------------
+
+        string environmentPath = Path.Combine(
+            datasetRoot,
+            "Environment"
+        );
+
+        if (!Directory.Exists(environmentPath))
+        {
+            Debug.LogWarning(
+                $"Environment folder not found: {environmentPath}"
+            );
+        }
+        else
+        {
+            Debug.Log(
+                $"Environment found: {environmentPath}"
+            );
+        }
+
+        // --------------------------------------------------
+        // Dataset loaded
+        // --------------------------------------------------
 
         //enable animation to start
         UIManager.startAnimation = true;
