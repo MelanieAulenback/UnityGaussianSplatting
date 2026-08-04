@@ -13,6 +13,11 @@ public class DA3CameraImporter : MonoBehaviour
     public static int imageWidth = 504;
     public static int imageHeight = 448;
 
+    public int imageWidthEnvPublic;
+    public int imageHeightEnvPublic;
+    public static int imageWidthEnv = 504;
+    public static int imageHeightEnv = 448;
+
     [Header("DA3 Data")]
     private float[,,] extrinsics;
     private float[,,] intrinsics;
@@ -24,14 +29,22 @@ public class DA3CameraImporter : MonoBehaviour
     // -----------------------------
     private void OnValidate()
     {
-        imageWidth = imageWidthPublic; // Updates static int when you change it in the inspector
+        //updates static int when you change it in the inspector
+        imageWidth = imageWidthPublic;
         imageHeight = imageHeightPublic;
+
+        imageWidthEnv = imageWidthEnvPublic;
+        imageHeightEnv = imageHeightEnvPublic;
     }
 
     private void Awake()
     {
-        imageWidth = imageWidthPublic; // Ensures it is set when the game starts
+        //ensures it is set when the game starts
+        imageWidth = imageWidthPublic; 
         imageHeight = imageHeightPublic;
+
+        imageWidthEnv = imageWidthEnvPublic;
+        imageHeightEnv = imageHeightEnvPublic;
     }
 
     // -----------------------------
@@ -49,18 +62,18 @@ public class DA3CameraImporter : MonoBehaviour
     // -----------------------------
     // APPLY ALL CAMERAS
     // -----------------------------
-    public void ApplyCameras(int width, int height)
+    public void ApplyCameras(int width, int height, float daWidth, float daHeight)
     {
         int count = Mathf.Min(cameras.Length, extrinsics.GetLength(0));
 
         for (int i = 0; i < count; i++)
-            ApplyCamera(i, width, height);
+            ApplyCamera(i, width, height, daWidth, daHeight);
     }
 
     // -----------------------------
     // CORE - just applies intrinsics to the current cam
     // -----------------------------
-    public void ApplyCamera(int i, int width, int height)
+    public void ApplyCamera(int i, int width, int height, float daWidth, float daHeight)
     {
         Camera cam = cameras[i];
 
@@ -72,10 +85,6 @@ public class DA3CameraImporter : MonoBehaviour
         float fy = intrinsics[i, 1, 1];
         float cx = intrinsics[i, 0, 2];
         float cy = intrinsics[i, 1, 2];
-
-        // DA3 depth resolution
-        float daWidth = imageWidth;
-        float daHeight = imageHeight;
 
         // Scale intrinsics into colour image space
         float scaleX = width / daWidth;

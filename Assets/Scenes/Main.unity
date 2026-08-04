@@ -1379,6 +1379,7 @@ MonoBehaviour:
   depthMinMaps: []
   envSplat: {fileID: 11400000, guid: 86f38de3efa260c4b959b6971d77c3ad, type: 2}
   envSplatRoot: {fileID: 1953865455}
+  envReconstructionRoot: {fileID: 0}
   environmentColorFrames: []
   envCameras: []
   numCameras: 8
@@ -1387,7 +1388,7 @@ MonoBehaviour:
   currentFrame: 0
   targetSceneSize: 10
   gaussianSize: 0.03
-  envGaussianSize: 0.08
+  envGaussianSize: 0.06
   splatBuffers:
   - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
   - {fileID: 11400000, guid: 9fff6bf7be150024abce453c66d5f16d, type: 2}
@@ -2028,6 +2029,8 @@ MonoBehaviour:
   - {fileID: 0}
   imageWidthPublic: 504
   imageHeightPublic: 280
+  imageWidthEnvPublic: 504
+  imageHeightEnvPublic: 448
   animator: {fileID: 916050661}
 --- !u!1 &1286519983
 GameObject:
@@ -2181,7 +2184,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!64 &1392966398
 MeshCollider:
   m_ObjectHideFlags: 0

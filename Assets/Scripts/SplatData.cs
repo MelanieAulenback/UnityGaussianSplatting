@@ -75,6 +75,23 @@ public class SplatData : ScriptableObject
         if (!needsInit)
         {
             UpdatePositionsOnly(verts);
+
+            for (int i = 0; i < verts.Length; i++)
+            {
+                int a = i * 3;
+
+                Axes[a] =
+                    Vector3.right * gaussianSize;
+
+                Axes[a + 1] =
+                    Vector3.up * gaussianSize;
+
+                Axes[a + 2] =
+                    Vector3.forward * gaussianSize;
+            }
+
+            UpdateAxesOnly();
+
             return;
         }
 
@@ -216,6 +233,13 @@ public class SplatData : ScriptableObject
         //fill the colour buffers
         _colorsA.SetData(c);
         _colorsB.SetData(c);
+    }
+
+    //updates axes only
+    public void UpdateAxesOnly()
+    {
+        _axesA.SetData(Axes);
+        _axesB.SetData(Axes);
     }
 
     //empties buffers

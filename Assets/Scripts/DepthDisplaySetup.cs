@@ -25,10 +25,10 @@ public class DepthDisplaySetup : MonoBehaviour
         );
         colourMaterial.SetTexture(
             "_ColTex",
-            splatAnimator.environmentColorFrames[8]
+            splatAnimator.colorFrames[1]
         );
 
-        colourMaterial.SetFloat("_Opacity", 0.5f);
+        colourMaterial.SetFloat("_Opacity", 1f);
         depthMaterial.SetFloat(
             "_MaxDepth",
             10f

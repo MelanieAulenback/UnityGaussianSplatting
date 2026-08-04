@@ -332,7 +332,7 @@ public class SplatAnimator : MonoBehaviour
         // Update camera poses
         //----------------------------------------------------
 
-        importer.ApplyCameras(FileSelector.colorWidth, FileSelector.colorHeight);
+        importer.ApplyCameras(FileSelector.colorWidth, FileSelector.colorHeight, DA3CameraImporter.imageWidth, DA3CameraImporter.imageHeight);
 
         SetCamPositions(renderCameras, glbCameras);
 
@@ -509,12 +509,6 @@ public class SplatAnimator : MonoBehaviour
         environmentCameraCount =
             environmentCameraVertices.Length;
 
-        UnityEngine.Debug.Log(
-            $"Environment loaded: " +
-            $"{environmentPoints.Length} points, " +
-            $"{environmentCameraCount} cameras"
-        );
-
         // -------------------------------------------------
         // Create environment colour textures
         // -------------------------------------------------
@@ -556,10 +550,6 @@ public class SplatAnimator : MonoBehaviour
             environmentColorFrames[i].Apply(false);
         }
 
-        UnityEngine.Debug.Log(
-            "Environment colour images loaded."
-        );
-
         // -------------------------------------------------
         // Generate environment Gaussian splat
         // -------------------------------------------------
@@ -567,10 +557,6 @@ public class SplatAnimator : MonoBehaviour
         envSplat.GaussiansFromCloud(
             environmentPoints,
             envGaussianSize
-        );
-
-        UnityEngine.Debug.Log(
-            "Environment Gaussians generated."
         );
 
         CreateCamerasFromDataset(
@@ -587,7 +573,7 @@ public class SplatAnimator : MonoBehaviour
         importer.InitializeCameras(environmentFolder);
 
         // Apply environment intrinsics
-        importer.ApplyCameras(FileSelector.colorWidthEnv, FileSelector.colorHeightEnv);
+        importer.ApplyCameras(FileSelector.colorWidthEnv, FileSelector.colorHeightEnv, DA3CameraImporter.imageWidthEnv, DA3CameraImporter.imageHeightEnv);
 
         SetCamPositions(envCameras, environmentCameraVertices);
 
@@ -1121,12 +1107,6 @@ public class SplatAnimator : MonoBehaviour
                 colourReady = true;
                 //make the newly coloured splat the active one
                 SwapSplats();
-            }
-            else
-            {
-                UnityEngine.Debug.Log(
-                    "Environment colouring complete."
-                );
             }
 
         });
