@@ -222,7 +222,7 @@ Transform:
   m_GameObject: {fileID: 110805661}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -1.27, z: 0}
+  m_LocalPosition: {x: 0, y: -7.04, z: 0}
   m_LocalScale: {x: 8.2478, y: 8.2478, z: 8.2478}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1387,7 +1387,7 @@ MonoBehaviour:
   frameCount: 0
   currentFrame: 0
   targetSceneSize: 10
-  gaussianSize: 0.03
+  gaussianSize: 0.02
   envGaussianSize: 0.06
   splatBuffers:
   - {fileID: 11400000, guid: a7d5db84a396a94449e8fd56917999f2, type: 2}
@@ -2184,7 +2184,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!64 &1392966398
 MeshCollider:
   m_ObjectHideFlags: 0

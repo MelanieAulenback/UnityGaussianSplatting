@@ -25,7 +25,7 @@ public class DepthDisplaySetup : MonoBehaviour
         );
         colourMaterial.SetTexture(
             "_ColTex",
-            splatAnimator.colorFrames[1]
+            splatAnimator.colorFrames[0]
         );
 
         colourMaterial.SetFloat("_Opacity", 1f);

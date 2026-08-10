@@ -11,7 +11,7 @@ public class DA3CameraImporter : MonoBehaviour
     public int imageWidthPublic;
     public int imageHeightPublic;
     public static int imageWidth = 504;
-    public static int imageHeight = 448;
+    public static int imageHeight = 280;
 
     public int imageWidthEnvPublic;
     public int imageHeightEnvPublic;

@@ -158,7 +158,44 @@ public class SplatAnimator : MonoBehaviour
         }
 
         //generate splat
-        NextSplat.GaussiansFromCloud(pointCloud, gaussianSize);
+        Matrix4x4[] cameraViewProjectionMatrices = new Matrix4x4[renderCameras.Length];
+
+        for (int i = 0; i < renderCameras.Length; i++)
+        {
+            Camera cam = renderCameras[i];
+
+            cameraViewProjectionMatrices[i] =
+                GL.GetGPUProjectionMatrix(
+                    cam.projectionMatrix,
+                    true
+                )
+                *
+                cam.worldToCameraMatrix;
+        }
+
+        //create aligned points array if its null
+        if (alignedPoints == null ||
+           alignedPoints.Length != pointCloud.Length)
+        {
+            alignedPoints = new Vector3[pointCloud.Length];
+        }
+
+        //apply the camera transforms to the points
+        for (int i = 0; i < pointCloud.Length; i++)
+        {
+            alignedPoints[i] =
+                    reconstructionMatrix.MultiplyPoint3x4(
+                        pointCloud[i]);
+        }
+
+        //filter positions by those actually in the mask
+        Vector3[] filteredPointCloud = FilterPositionsByAllCameraMasks(
+            alignedPoints,
+            colorFrames,
+            cameraViewProjectionMatrices
+        );
+        
+        NextSplat.GaussiansFromCloud(filteredPointCloud, gaussianSize);
 
         //generate gaussian depth maps
         for (int i = 0; i < numCameras; i++)
@@ -172,6 +209,7 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[i],
                 NextSplat,
                 depthMinMaps[i],
+                colorFrames,
                 i
             );
 
@@ -209,6 +247,22 @@ public class SplatAnimator : MonoBehaviour
         //load current frame
         LoadCurrentFrame();
 
+        //world to camera matrix
+        Matrix4x4[] cameraViewProjectionMatrices = new Matrix4x4[renderCameras.Length];
+
+        for (int i = 0; i < renderCameras.Length; i++)
+        {
+            Camera cam = renderCameras[i];
+
+            cameraViewProjectionMatrices[i] =
+                GL.GetGPUProjectionMatrix(
+                    cam.projectionMatrix,
+                    true
+                )
+                *
+                cam.worldToCameraMatrix;
+        }
+
         //create aligned points array if its null
         if (alignedPoints == null ||
            alignedPoints.Length != pointCloud.Length)
@@ -224,8 +278,15 @@ public class SplatAnimator : MonoBehaviour
                         pointCloud[i]);
         }
 
+        //filter positions by those actually in the mask
+        Vector3[] filteredPointCloud = FilterPositionsByAllCameraMasks(
+            alignedPoints,
+            colorFrames,
+            cameraViewProjectionMatrices
+        );
+
         //generate the splat
-        NextSplat.GaussiansFromCloud(alignedPoints, gaussianSize);
+        NextSplat.GaussiansFromCloud(filteredPointCloud, gaussianSize);
 
         //if there are colour frames, create a depth map per camera
         for (int i = 0; i < numCameras; i++)
@@ -250,6 +311,7 @@ public class SplatAnimator : MonoBehaviour
                 renderCameras[i],
                 NextSplat,
                 depthMinMaps[i],
+                colorFrames,
                 i);
 
             ConvertDepth(
@@ -590,6 +652,7 @@ public class SplatAnimator : MonoBehaviour
                 envCameras[i],
                 envSplat,
                 environmentDepthMinMaps[i],
+                environmentColorFrames,
                 i
             );
 
@@ -879,6 +942,164 @@ public class SplatAnimator : MonoBehaviour
         }
     }
 
+    private Vector3[] FilterPositionsByAllCameraMasks(
+    Vector3[] positions,
+    Texture2D[] colorFrames,
+    Matrix4x4[] viewProjectionMatrices
+)
+    {
+        List<Vector3> filteredPositions = new List<Vector3>();
+
+        int cameraCount = Mathf.Min(
+            colorFrames.Length,
+            viewProjectionMatrices.Length
+        );
+
+
+        // Cache pixel data so we don't repeatedly call GetPixels32()
+        Color32[][] cameraPixels = new Color32[cameraCount][];
+
+        for (int i = 0; i < cameraCount; i++)
+        {
+            cameraPixels[i] = colorFrames[i].GetPixels32();
+        }
+
+
+        int kept = 0;
+
+
+        foreach (Vector3 position in positions)
+        {
+            int foregroundVotes = 0;
+
+            for (int cam = 0; cam < cameraCount; cam++)
+            {
+                Texture2D texture = colorFrames[cam];
+
+                Matrix4x4 vp = viewProjectionMatrices[cam];
+
+
+                Vector4 clip =
+                    vp *
+                    new Vector4(
+                        position.x,
+                        position.y,
+                        position.z,
+                        1
+                    );
+
+
+                // Behind camera
+                if (clip.w <= 0)
+                    continue;
+
+
+                Vector3 ndc = clip / clip.w;
+
+
+                float u =
+                    1.0f -
+                    (ndc.x * 0.5f + 0.5f);
+
+                float v =
+                    1.0f -
+                    (ndc.y * 0.5f + 0.5f);
+
+
+                // Outside image
+                if (u < 0 || u > 1 ||
+                    v < 0 || v > 1)
+                {
+                    continue;
+                }
+
+
+                int x = Mathf.Clamp(
+                    (int)(u * texture.width),
+                    0,
+                    texture.width - 1
+                );
+
+
+                int y = Mathf.Clamp(
+                    (int)(v * texture.height),
+                    0,
+                    texture.height - 1
+                );
+
+
+                // ----------------------------------------------------
+                // Allow a small amount of projection error.
+                // Look for foreground anywhere in a small
+                // neighbourhood around the projected point.
+                // ----------------------------------------------------
+
+                const int maskRadius = 7;
+
+                bool foreground = false;
+
+                for (int dy = -maskRadius; dy <= maskRadius && !foreground; dy++)
+                {
+                    for (int dx = -maskRadius; dx <= maskRadius; dx++)
+                    {
+                        int sampleX = Mathf.Clamp(
+                            x + dx,
+                            0,
+                            texture.width - 1
+                        );
+
+                        int sampleY = Mathf.Clamp(
+                            y + dy,
+                            0,
+                            texture.height - 1
+                        );
+
+                        Color32 sample =
+                            cameraPixels[cam][
+                                sampleY * texture.width + sampleX
+                            ];
+
+                        if (sample.a > 0)
+                        {
+                            foreground = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (foreground)
+                {
+                    foregroundVotes++;
+                }
+            }
+
+            if (currentFrame == 0)
+            {
+                if (foregroundVotes >= 2)
+                {
+                    filteredPositions.Add(position);
+                    kept++;
+                }
+            }
+            else 
+            { 
+                if (foregroundVotes >= 2)
+                {
+                    filteredPositions.Add(position);
+                    kept++;
+                }
+            }
+        }
+
+        /*
+        UnityEngine.Debug.Log(
+            $"Position filtering: {positions.Length:N0} -> {kept:N0}"
+        );
+        */
+
+        return filteredPositions.ToArray();
+    }
+
     // =====================================================
     // COLOUR GAUSSIANS + CREATE DEPTH MAP
     // =====================================================
@@ -1117,6 +1338,7 @@ public class SplatAnimator : MonoBehaviour
     Camera cam,
     SplatData splatData,
     RenderTexture depthMinTexture,
+    Texture2D[] colourImages,
     int cameraIndex)
     {
         //find the write depth function in the compute shader
@@ -1128,7 +1350,13 @@ public class SplatAnimator : MonoBehaviour
             "DepthTexture",
             depthMinTexture
         );
-        
+
+        splatCompute.SetTexture(
+            kernel,
+            "_ColorTex",
+            colourImages[cameraIndex]
+        );
+
         //pass the gaussian positions to the compute shader
         splatCompute.SetBuffer(
             kernel,
@@ -1152,6 +1380,16 @@ public class SplatAnimator : MonoBehaviour
         splatCompute.SetInt(
             "TextureHeight",
             depthMinTexture.height
+        );
+
+        splatCompute.SetInt(
+            "ColorTextureWidth",
+            colourImages[cameraIndex].width
+        );
+
+        splatCompute.SetInt(
+            "ColorTextureHeight",
+            colourImages[cameraIndex].height
         );
 
         //matrix of world space to clip space 

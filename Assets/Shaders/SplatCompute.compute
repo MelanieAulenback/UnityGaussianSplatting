@@ -35,6 +35,7 @@ int _GaussianCount;
 Texture2D<int> DepthIntTexture;
 RWTexture2D<float> DepthFloatTexture;
 
+
 [numthreads(256, 1, 1)]
 void ColourGaussians(uint id : SV_DispatchThreadID)
 {
@@ -87,23 +88,59 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     {
         return;
     }
+    
+    uint2 colorPixel;
 
-    float depthFromMap = _DepthTex.Load(int3(pixel, 0));
+    colorPixel.x = uv.x * ColorTextureWidth;
+    colorPixel.y = (1.0 - uv.y) * ColorTextureHeight;
+
+    colorPixel.x = min(colorPixel.x, ColorTextureWidth - 1);
+    colorPixel.y = min(colorPixel.y, ColorTextureHeight - 1);
+
+    float4 color = _ColorTex.Load(int3(colorPixel, 0));
+
+    if (color.a <= 0.0)
+    {
+        return;
+    }    
+
     
-    /*
-    const float depthTolerance = 0.5; // 2 cm
-    
-    if (gaussianDepth > depthFromMap + depthTolerance)
+    const int depthRadius = 1;
+
+    float depthFromMap = 9999.0;
+
+    for (int y = -depthRadius; y <= depthRadius; y++)
+    {
+        for (int x = -depthRadius; x <= depthRadius; x++)
+        {
+            int2 p = int2(pixel) + int2(x, y);
+
+            if (p.x < 0 || p.y < 0 ||
+            p.x >= TextureWidth ||
+            p.y >= TextureHeight)
+            {
+                continue;
+            }
+
+            float d = _DepthTex.Load(int3(p, 0));
+
+            if (d > 0.001 && d < depthFromMap)
+            {
+                depthFromMap = d;
+            }
+        }
+    }
+    if (depthFromMap <= 0.001 || depthFromMap >= 9990.0)
     {
         return;
     }
-    */
     
-    const float frontTolerance = 0.015;
-    const float backTolerance = 0.025;
+    const float frontTolerance = 0.02;
+    const float backTolerance = 0.03;
 
     float delta = gaussianDepth - depthFromMap;
 
+    
     if (delta < -frontTolerance || delta > backTolerance)
     {
         return;
@@ -132,49 +169,26 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
             ColorTextureHeight
         );
     }
-
-    
-    uint2 colorPixel;
-
-    colorPixel.x = uv.x * ColorTextureWidth;
-    colorPixel.y = (1.0 - uv.y) * ColorTextureHeight;
-
-    colorPixel.x = min(colorPixel.x, ColorTextureWidth - 1);
-    colorPixel.y = min(colorPixel.y, ColorTextureHeight - 1);
-
-    /*
-    float4 color = _ColorTex.Load(
-        int3(colorPixel, 0)
-    );
-
-        _AccumColor[id] = color;
-        _Contribution[id] = 1;
-    */
-    
-    float4 color = _ColorTex.Load(int3(colorPixel, 0));
-
-    if (color.a <= 0.0)
-        return;
     
     float depthError = abs(delta);
 
-// Distance from image centre (0 = centre, ~1.4 = corner)
+    // Distance from image centre (0 = centre, ~1.4 = corner)
     float2 centred = uv * 2.0 - 1.0;
     float radial = length(centred);
 
-// Distance from nearest image edge
+    // Distance from nearest image edge
     float border = min(
-    min(uv.x, uv.y),
-    min(1.0 - uv.x, 1.0 - uv.y)
-);
+        min(uv.x, uv.y),
+        min(1.0 - uv.x, 1.0 - uv.y)
+    );
 
-// Lower score is better
+    // Lower score is better
     float score =
       depthError * 150.0
     + radial * 3.0
     + (1.0 - border) * 2.0;
 
-// Only replace the current camera if it's noticeably better
+    // Only replace the current camera if it's noticeably better
     if (score < _BestCameraScore[id] - 0.1)
     {
         _BestCameraScore[id] = score;
@@ -182,7 +196,6 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
         _Contribution[id] = 1;
     }
 }
-
 
 
 [numthreads(256, 1, 1)]
@@ -213,16 +226,19 @@ void WriteDepth(uint id : SV_DispatchThreadID)
 {
     if (id >= _GaussianCount)
         return;
-    
+
 
     float3 worldPos = _Positions[id];
+
 
     float4 camPos = mul(
         _WorldToCamera,
         float4(worldPos, 1)
     );
 
+
     float depth = -camPos.z;
+
 
     if (depth <= 0)
         return;
@@ -233,63 +249,81 @@ void WriteDepth(uint id : SV_DispatchThreadID)
         float4(worldPos, 1)
     );
 
+
     float2 ndc = clipPos.xy / clipPos.w;
 
 
+    float2 uv;
+
+
+    uv.x = 1.0 - (ndc.x * 0.5 + 0.5);
+    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+
+
+    if (uv.x < 0 || uv.x > 1 ||
+        uv.y < 0 || uv.y > 1)
+    {
+        return;
+    }
+
+
+    // ------------------------------------------
+    // Check colour alpha mask
+    // ------------------------------------------
+
+    uint2 colorPixel;
+
+
+    colorPixel.x = (uint) (uv.x * ColorTextureWidth);
+    colorPixel.y = (uint) ((1.0 - uv.y) * ColorTextureHeight);
+
+
+    colorPixel.x = min(
+        colorPixel.x,
+        ColorTextureWidth - 1
+    );
+
+
+    colorPixel.y = min(
+        colorPixel.y,
+        ColorTextureHeight - 1
+    );
+
+
+    float4 color = _ColorTex.Load(
+        int3(colorPixel, 0)
+    );
+
+
+    // Background pixel -> ignore this Gaussian
+    if (color.a <= 0.0)
+    {
+        return;
+    }
+
+
+    // ------------------------------------------
+    // Write depth
+    // ------------------------------------------
+
     uint2 pixel;
 
-    pixel.x =
-        (1.0 - (ndc.x * 0.5 + 0.5)) * TextureWidth;
 
-    pixel.y =
-        (1.0 - (ndc.y * 0.5 + 0.5)) * TextureHeight;
+    pixel.x = (uint) (uv.x * TextureWidth);
+    pixel.y = (uint) (uv.y * TextureHeight);
 
 
     if (pixel.x >= TextureWidth ||
         pixel.y >= TextureHeight)
+    {
         return;
-
-    
-    int depthInt = (int) (depth * 1000.0);
-    /*
-    int oldDepth;
-
-    InterlockedMin(
-            DepthTexture[pixel],
-            depthInt,
-            oldDepth);
-    */
-    /*
-    const int radius = 8;
-
-    for (int y = -radius; y <= radius; y++)
-    {
-        for (int x = -radius; x <= radius; x++)
-        {
-        // Make it circular instead of square
-            if (x * x + y * y > radius * radius)
-                continue;
-
-            int2 p = int2(pixel) + int2(x, y);
-
-            if (p.x < 0 || p.y < 0 ||
-            p.x >= TextureWidth ||
-            p.y >= TextureHeight)
-                continue;
-
-            int oldDepth;
-
-            InterlockedMin(
-            DepthTexture[p],
-            depthInt,
-            oldDepth
-        );
-        }
     }
-    */
-    const int radius = 0;
 
-    //float centerDA3 = _DA3DepthTex.Load(int3(pixel, 0));
+
+    int depthInt = (int) (depth * 1000.0);
+
+
+    const int radius = 2;
 
 
     for (int y = -radius; y <= radius; y++)
@@ -305,48 +339,21 @@ void WriteDepth(uint id : SV_DispatchThreadID)
 
 
             if (p.x < 0 || p.y < 0 ||
-            p.x >= TextureWidth ||
-            p.y >= TextureHeight)
-                continue;
-
-
-
-            //float da3Depth = _DA3DepthTex.Load(int3(p, 0));
-
-
-        // ignore DA3 background
-            //if (da3Depth <= 0)
-                //continue;
-
-
-        /*
-          Compare DA3 depth around gaussian.
-          If the DA3 depth changes a lot,
-          we are crossing an object boundary.
-        */
-            /*
-            if (centerDA3 <= 0)
-                return;
-
-            float boundaryDifference =
-            abs(da3Depth - centerDA3);
-
-            
-            if (boundaryDifference > 0.02)
+                p.x >= TextureWidth ||
+                p.y >= TextureHeight)
             {
                 continue;
             }
-            */
 
 
             int oldDepth;
 
 
             InterlockedMin(
-            DepthTexture[p],
-            depthInt,
-            oldDepth
-        );
+                DepthTexture[p],
+                depthInt,
+                oldDepth
+            );
         }
     }
 }
