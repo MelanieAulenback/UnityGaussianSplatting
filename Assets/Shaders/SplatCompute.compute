@@ -3,6 +3,9 @@
 #pragma kernel WriteDepth
 #pragma kernel ConvertDepth
 #pragma kernel ClearDepth
+#pragma kernel FilterPositionsByMasks
+
+RWStructuredBuffer<uint> _ColourDiagnostic;
 
 Texture2D<float4> _ColorTex;
 SamplerState sampler_ColorTex;
@@ -35,6 +38,145 @@ int _GaussianCount;
 Texture2D<int> DepthIntTexture;
 RWTexture2D<float> DepthFloatTexture;
 
+//filtering
+
+StructuredBuffer<float3> _FilterPositions;
+StructuredBuffer<float4x4> _FilterViewProjs;
+StructuredBuffer<float4x4> _FilterWorldToCameras;
+
+Texture2DArray<float4> _FilterMaskTex;
+Texture2DArray<float> _FilterDepthTex;
+
+RWStructuredBuffer<uint> _FilterVisibility;
+
+uint _FilterPointCount;
+uint _FilterCameraCount;
+
+uint _FilterMaskWidth;
+uint _FilterMaskHeight;
+
+uint _FilterMaskRadius;
+uint _FilterRequiredVotes;
+
+uint _FilterDepthWidth;
+uint _FilterDepthHeight;
+/*
+[numthreads(256, 1, 1)]
+void ColourGaussians(uint id : SV_DispatchThreadID)
+{
+    if (id >= _GaussianCount)
+        return;
+
+// -------------------------------------------------
+// Diagnostic: total positions entering kernel
+// -------------------------------------------------
+
+    InterlockedAdd(_ColourDiagnostic[0], 1);
+
+    float3 worldPos = _Positions[id];
+
+
+// -------------------------------------------------
+// Project Gaussian into camera
+// -------------------------------------------------
+
+    float4 clip = mul(
+    _ViewProj,
+    float4(worldPos, 1)
+);
+
+// Behind camera
+    if (clip.w <= 0)
+        return;
+
+
+    float2 ndc = clip.xy / clip.w;
+
+
+    float2 uv;
+
+    uv.x = 1.0 - (ndc.x * 0.5 + 0.5);
+    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+
+
+// Outside image
+    if (uv.x < 0 || uv.x > 1 ||
+    uv.y < 0 || uv.y > 1)
+    {
+        return;
+    }
+
+
+// -------------------------------------------------
+// Diagnostic: successfully projected
+// -------------------------------------------------
+
+    InterlockedAdd(
+    _ColourDiagnostic[2],
+    1
+);
+
+
+// -------------------------------------------------
+// Convert UV to colour texture pixel
+// -------------------------------------------------
+
+    uint2 colorPixel;
+
+    colorPixel.x =
+    (uint) (uv.x * ColorTextureWidth);
+
+    colorPixel.y =
+    (uint) ((1.0 - uv.y) * ColorTextureHeight);
+
+
+    colorPixel.x =
+    min(
+        colorPixel.x,
+        ColorTextureWidth - 1
+    );
+
+    colorPixel.y =
+    min(
+        colorPixel.y,
+        ColorTextureHeight - 1
+    );
+
+
+// -------------------------------------------------
+// Read colour
+//
+// NO alpha test.
+// NO foreground mask.
+// NO depth test.
+// -------------------------------------------------
+
+    float4 color =
+    _ColorTex.Load(
+        int3(colorPixel, 0)
+    );
+
+
+// -------------------------------------------------
+// Diagnostic: reached final colouring stage
+// -------------------------------------------------
+
+    InterlockedAdd(
+    _ColourDiagnostic[6],
+    1
+);
+
+
+// -------------------------------------------------
+// Give every surviving Gaussian the projected
+// camera colour.
+// -------------------------------------------------
+
+    _AccumColor[id] = color;
+
+    _Contribution[id] = 1;
+}
+*/
 
 [numthreads(256, 1, 1)]
 void ColourGaussians(uint id : SV_DispatchThreadID)
@@ -43,15 +185,39 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
         return;
 
 
+    // -------------------------------------------------
+    // Diagnostic: total positions entering kernel
+    // -------------------------------------------------
+
+    InterlockedAdd(_ColourDiagnostic[0], 1);
+
+
     float3 worldPos = _Positions[id];
 
-    
-    float4 camPos = mul(_WorldToCamera, float4(worldPos, 1));
+
+    // -------------------------------------------------
+    // Camera-space depth
+    // -------------------------------------------------
+
+    float4 camPos = mul(
+        _WorldToCamera,
+        float4(worldPos, 1)
+    );
+
     float gaussianDepth = -camPos.z;
-    
+
+
     if (gaussianDepth <= 0)
         return;
-    
+
+
+    InterlockedAdd(_ColourDiagnostic[1], 1);
+
+
+    // -------------------------------------------------
+    // Project Gaussian
+    // -------------------------------------------------
+
     float4 clip = mul(
         _ViewProj,
         float4(worldPos, 1)
@@ -71,131 +237,219 @@ void ColourGaussians(uint id : SV_DispatchThreadID)
     uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
 
 
-    if (uv.x < 0 || uv.x > 1 ||
-        uv.y < 0 || uv.y > 1)
+    if (
+        uv.x < 0 ||
+        uv.x > 1 ||
+        uv.y < 0 ||
+        uv.y > 1
+    )
     {
         return;
     }
-    
-    
+
+
+    InterlockedAdd(
+        _ColourDiagnostic[2],
+        1
+    );
+
+
+    // -------------------------------------------------
+    // Depth texture pixel
+    // -------------------------------------------------
+
     uint2 pixel;
 
-    pixel.x = uv.x * TextureWidth;
-    pixel.y = uv.y * TextureHeight;
-    
-    if (pixel.x >= TextureWidth - 1 ||
-    pixel.y >= TextureHeight - 1)
-    {
-        return;
-    }
-    
+    pixel.x =
+        (uint) (uv.x * TextureWidth);
+
+    pixel.y =
+        (uint) (uv.y * TextureHeight);
+
+
+    pixel.x =
+        min(
+            pixel.x,
+            TextureWidth - 1
+        );
+
+    pixel.y =
+        min(
+            pixel.y,
+            TextureHeight - 1
+        );
+
+
+    // -------------------------------------------------
+    // Colour texture pixel
+    // -------------------------------------------------
+
     uint2 colorPixel;
 
-    colorPixel.x = uv.x * ColorTextureWidth;
-    colorPixel.y = (1.0 - uv.y) * ColorTextureHeight;
+    colorPixel.x =
+        (uint) (uv.x * ColorTextureWidth);
 
-    colorPixel.x = min(colorPixel.x, ColorTextureWidth - 1);
-    colorPixel.y = min(colorPixel.y, ColorTextureHeight - 1);
+    colorPixel.y =
+        (uint) ((1.0 - uv.y) * ColorTextureHeight);
 
-    float4 color = _ColorTex.Load(int3(colorPixel, 0));
 
+    colorPixel.x =
+        min(
+            colorPixel.x,
+            ColorTextureWidth - 1
+        );
+
+    colorPixel.y =
+        min(
+            colorPixel.y,
+            ColorTextureHeight - 1
+        );
+
+
+    // -------------------------------------------------
+    // PERSON / COLOUR MASK TEST
+    //
+    // The projected Gaussian must land directly
+    // on a foreground pixel.
+    // -------------------------------------------------
+
+    float4 color =
+        _ColorTex.Load(
+            int3(colorPixel, 0)
+        );
+
+
+    // Alpha <= 0 means background.
     if (color.a <= 0.0)
     {
         return;
-    }    
-
-    
-    const int depthRadius = 1;
-
-    float depthFromMap = 9999.0;
-
-    for (int y = -depthRadius; y <= depthRadius; y++)
-    {
-        for (int x = -depthRadius; x <= depthRadius; x++)
-        {
-            int2 p = int2(pixel) + int2(x, y);
-
-            if (p.x < 0 || p.y < 0 ||
-            p.x >= TextureWidth ||
-            p.y >= TextureHeight)
-            {
-                continue;
-            }
-
-            float d = _DepthTex.Load(int3(p, 0));
-
-            if (d > 0.001 && d < depthFromMap)
-            {
-                depthFromMap = d;
-            }
-        }
     }
-    if (depthFromMap <= 0.001 || depthFromMap >= 9990.0)
-    {
-        return;
-    }
-    
-    const float frontTolerance = 0.02;
-    const float backTolerance = 0.03;
 
-    float delta = gaussianDepth - depthFromMap;
 
-    
-    if (delta < -frontTolerance || delta > backTolerance)
-    {
-        return;
-    }
-   
-    if (id < 10)
-    {
-        _DebugBuffer[0] = float4(
-            gaussianDepth,
-            depthFromMap,
-             gaussianDepth - depthFromMap,
-            0);
-
-        _DebugBuffer[1] = float4(
-            uv.x,
-            uv.y,
-            pixel.x,
-            pixel.y
-        );
-        
-        
-        _DebugBuffer[2] = float4(
-            TextureWidth,
-            TextureHeight,
-            ColorTextureWidth,
-            ColorTextureHeight
-        );
-    }
-    
-    float depthError = abs(delta);
-
-    // Distance from image centre (0 = centre, ~1.4 = corner)
-    float2 centred = uv * 2.0 - 1.0;
-    float radial = length(centred);
-
-    // Distance from nearest image edge
-    float border = min(
-        min(uv.x, uv.y),
-        min(1.0 - uv.x, 1.0 - uv.y)
+    InterlockedAdd(
+        _ColourDiagnostic[3],
+        1
     );
 
-    // Lower score is better
-    float score =
-      depthError * 150.0
-    + radial * 3.0
-    + (1.0 - border) * 2.0;
 
-    // Only replace the current camera if it's noticeably better
-    if (score < _BestCameraScore[id] - 0.1)
+    // -------------------------------------------------
+    // Find depth around projected point
+    // -------------------------------------------------
+
+    // -------------------------------------------------
+    // Get depth at the exact projected Gaussian pixel
+    // -------------------------------------------------
+
+    float depthFromMap =
+    _DepthTex.Load(
+        int3(pixel, 0)
+    );
+
+    // No valid depth
+    if (
+        depthFromMap <= 0.001 ||
+        depthFromMap >= 9990.0
+    )
+    {
+        return;
+    }
+
+
+    InterlockedAdd(
+        _ColourDiagnostic[4],
+        1
+    );
+
+
+    // -------------------------------------------------
+    // Depth consistency
+    // -------------------------------------------------
+
+    const float frontTolerance = 0.01;
+    const float backTolerance = 0.03;
+
+
+    float delta =
+        gaussianDepth - depthFromMap;
+
+
+    // Positive delta:
+    // Gaussian is behind the depth surface.
+    //
+    // Negative delta:
+    // Gaussian is in front of the depth surface.
+
+    if (
+        delta < -frontTolerance ||
+        delta > backTolerance
+    )
+    {
+        return;
+    }
+
+
+    InterlockedAdd(
+        _ColourDiagnostic[5],
+        1
+    );
+
+
+    // -------------------------------------------------
+    // Camera quality score
+    // -------------------------------------------------
+
+    float depthError =
+        abs(delta);
+
+
+    float2 centred =
+        uv * 2.0 - 1.0;
+
+
+    float radial =
+        length(centred);
+
+
+    float border =
+        min(
+            min(uv.x, uv.y),
+            min(1.0 - uv.x, 1.0 - uv.y)
+        );
+
+
+    float score =
+        depthError * 150.0
+        + radial * 3.0
+        + (1.0 - border) * 2.0;
+
+
+    // -------------------------------------------------
+    // Diagnostic: reached final stage
+    // -------------------------------------------------
+
+    InterlockedAdd(
+        _ColourDiagnostic[6],
+        1
+    );
+
+
+    // -------------------------------------------------
+    // Keep best camera
+    // -------------------------------------------------
+
+    if (
+        score <
+        _BestCameraScore[id] - 0.1
+    )
     {
         _BestCameraScore[id] = score;
+
         _AccumColor[id] = color;
+
         _Contribution[id] = 1;
     }
 }
+
 
 
 [numthreads(256, 1, 1)]
@@ -213,12 +467,11 @@ void FinalizeColours(uint id : SV_DispatchThreadID)
         _FinalColor[id] = float4(0, 0, 0, 0);
         return;
     }
-    else
-    {
-        float4 color = _AccumColor[id] / count;
-        color.a = 1;
-        _FinalColor[id] = color;
-    }
+    
+    float4 color = _AccumColor[id] / count;
+
+    // Keep the accumulated alpha.
+    _FinalColor[id] = color;
 }
 
 [numthreads(64, 1, 1)]
@@ -231,123 +484,201 @@ void WriteDepth(uint id : SV_DispatchThreadID)
     float3 worldPos = _Positions[id];
 
 
+    // ------------------------------------------
+    // Camera-space depth
+    // ------------------------------------------
+
     float4 camPos = mul(
         _WorldToCamera,
         float4(worldPos, 1)
     );
 
-
     float depth = -camPos.z;
-
 
     if (depth <= 0)
         return;
 
+
+    // ------------------------------------------
+    // Project Gaussian
+    // ------------------------------------------
 
     float4 clipPos = mul(
         _ViewProj,
         float4(worldPos, 1)
     );
 
+    if (clipPos.w <= 0)
+        return;
 
-    float2 ndc = clipPos.xy / clipPos.w;
+
+    float2 ndc =
+        clipPos.xy / clipPos.w;
 
 
     float2 uv;
 
+    uv.x =
+        1.0 -
+        (ndc.x * 0.5 + 0.5);
 
-    uv.x = 1.0 - (ndc.x * 0.5 + 0.5);
-    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+    uv.y =
+        1.0 -
+        (ndc.y * 0.5 + 0.5);
 
 
-    if (uv.x < 0 || uv.x > 1 ||
-        uv.y < 0 || uv.y > 1)
+    if (
+        uv.x < 0 ||
+        uv.x > 1 ||
+        uv.y < 0 ||
+        uv.y > 1
+    )
     {
         return;
     }
 
 
     // ------------------------------------------
-    // Check colour alpha mask
-    // ------------------------------------------
-
-    uint2 colorPixel;
-
-
-    colorPixel.x = (uint) (uv.x * ColorTextureWidth);
-    colorPixel.y = (uint) ((1.0 - uv.y) * ColorTextureHeight);
-
-
-    colorPixel.x = min(
-        colorPixel.x,
-        ColorTextureWidth - 1
-    );
-
-
-    colorPixel.y = min(
-        colorPixel.y,
-        ColorTextureHeight - 1
-    );
-
-
-    float4 color = _ColorTex.Load(
-        int3(colorPixel, 0)
-    );
-
-
-    // Background pixel -> ignore this Gaussian
-    if (color.a <= 0.0)
-    {
-        return;
-    }
-
-
-    // ------------------------------------------
-    // Write depth
+    // Convert to depth pixel
     // ------------------------------------------
 
     uint2 pixel;
 
+    pixel.x =
+        (uint) (uv.x * TextureWidth);
 
-    pixel.x = (uint) (uv.x * TextureWidth);
-    pixel.y = (uint) (uv.y * TextureHeight);
+    pixel.y =
+        (uint) (uv.y * TextureHeight);
 
 
-    if (pixel.x >= TextureWidth ||
-        pixel.y >= TextureHeight)
+    if (
+        pixel.x >= TextureWidth ||
+        pixel.y >= TextureHeight
+    )
     {
         return;
     }
 
 
-    int depthInt = (int) (depth * 1000.0);
+    // ------------------------------------------
+    // Depth value
+    // ------------------------------------------
+
+    int depthInt =
+        (int) (depth * 1000.0);
 
 
-    const int radius = 2;
+    // ------------------------------------------
+    // Write depth footprint
+    // ------------------------------------------
+
+    const int radius = 7;
 
 
-    for (int y = -radius; y <= radius; y++)
+    for (
+        int y = -radius;
+        y <= radius;
+        y++
+    )
     {
-        for (int x = -radius; x <= radius; x++)
+        for (
+            int x = -radius;
+            x <= radius;
+            x++
+        )
         {
-
-            if (x * x + y * y > radius * radius)
-                continue;
-
-
-            int2 p = int2(pixel) + int2(x, y);
-
-
-            if (p.x < 0 || p.y < 0 ||
-                p.x >= TextureWidth ||
-                p.y >= TextureHeight)
+            if (
+                x * x +
+                y * y >
+                radius * radius
+            )
             {
                 continue;
             }
 
 
-            int oldDepth;
+            int2 p =
+                int2(pixel) +
+                int2(x, y);
 
+
+            if (
+                p.x < 0 ||
+                p.y < 0 ||
+                p.x >= TextureWidth ||
+                p.y >= TextureHeight
+            )
+            {
+                continue;
+            }
+
+
+            // ----------------------------------
+            // Convert depth pixel back into
+            // colour-image coordinates
+            // ----------------------------------
+
+            float2 depthUV;
+
+            depthUV.x =
+                (p.x + 0.5) /
+                (float) TextureWidth;
+
+            depthUV.y =
+                (p.y + 0.5) /
+                (float) TextureHeight;
+
+
+            uint2 maskPixel;
+
+            maskPixel.x =
+                (uint) (
+                    depthUV.x *
+                    ColorTextureWidth
+                );
+
+            maskPixel.y =
+                (uint) (
+                    (1.0 - depthUV.y) *
+                    ColorTextureHeight
+                );
+
+
+            maskPixel.x =
+                min(
+                    maskPixel.x,
+                    ColorTextureWidth - 1
+                );
+
+            maskPixel.y =
+                min(
+                    maskPixel.y,
+                    ColorTextureHeight - 1
+                );
+
+
+            // ----------------------------------
+            // ONLY write depth if this pixel
+            // is actually inside the colour mask
+            // ----------------------------------
+
+            float4 maskColor =
+                _ColorTex.Load(
+                    int3(maskPixel, 0)
+                );
+
+
+            if (maskColor.a <= 0.0)
+            {
+                continue;
+            }
+
+
+            // ----------------------------------
+            // Write depth
+            // ----------------------------------
+
+            int oldDepth;
 
             InterlockedMin(
                 DepthTexture[p],
@@ -386,4 +717,205 @@ void ClearDepth(uint3 id : SV_DispatchThreadID)
         return;
 
     DepthTexture[id.xy] = 2147483647;
+}
+
+[numthreads(256, 1, 1)]
+void FilterPositionsByMasks(uint id : SV_DispatchThreadID)
+{
+    if (id >= _FilterPointCount)
+        return;
+
+
+    float3 position = _FilterPositions[id];
+
+
+    // -------------------------------------------------
+    // Number of cameras where the point is visible
+    // -------------------------------------------------
+
+    uint projectedCameras = 0;
+
+    // Number of cameras whose foreground mask
+    // contains this point.
+    uint foregroundVotes = 0;
+
+
+    // -------------------------------------------------
+    // Check every camera
+    // -------------------------------------------------
+
+    for (uint cam = 0; cam < _FilterCameraCount; cam++)
+    {
+        float4 worldPoint =
+            float4(position, 1.0);
+
+
+        // -------------------------------------------------
+        // Project point
+        // -------------------------------------------------
+
+        float4 clip =
+            mul(
+                _FilterViewProjs[cam],
+                worldPoint
+            );
+
+
+        if (clip.w <= 0.0)
+            continue;
+
+
+        float2 ndc =
+            clip.xy / clip.w;
+
+
+        float2 uv;
+
+        uv.x =
+            1.0 -
+            (ndc.x * 0.5 + 0.5);
+
+        uv.y =
+            1.0 -
+            (ndc.y * 0.5 + 0.5);
+
+
+        // Outside camera
+        if (
+            uv.x < 0.0 ||
+            uv.x > 1.0 ||
+            uv.y < 0.0 ||
+            uv.y > 1.0
+        )
+        {
+            continue;
+        }
+
+
+        projectedCameras++;
+
+
+        // -------------------------------------------------
+        // Convert to mask pixel
+        // -------------------------------------------------
+
+        uint2 pixel;
+
+        pixel.x =
+            (uint) (uv.x * _FilterMaskWidth);
+
+        pixel.y =
+            (uint) ((1.0 - uv.y) * _FilterMaskHeight);
+
+
+        pixel.x =
+            min(
+                pixel.x,
+                _FilterMaskWidth - 1
+            );
+
+        pixel.y =
+            min(
+                pixel.y,
+                _FilterMaskHeight - 1
+            );
+
+
+        // -------------------------------------------------
+        // Search mask neighbourhood
+        // -------------------------------------------------
+
+        bool foreground = false;
+
+
+        for (
+            int my = -(int) _FilterMaskRadius;
+            my <= (int) _FilterMaskRadius && !foreground;
+            my++
+        )
+        {
+            for (
+                int mx = -(int) _FilterMaskRadius;
+                mx <= (int) _FilterMaskRadius;
+                mx++
+            )
+            {
+                int2 p =
+                    int2(pixel) +
+                    int2(mx, my);
+
+
+                if (
+                    p.x < 0 ||
+                    p.x >= (int) _FilterMaskWidth ||
+                    p.y < 0 ||
+                    p.y >= (int) _FilterMaskHeight
+                )
+                {
+                    continue;
+                }
+
+
+                float4 mask =
+                    _FilterMaskTex.Load(
+                        int4(
+                            p.x,
+                            p.y,
+                            cam,
+                            0
+                        )
+                    );
+
+
+                if (mask.a > 0.5)
+                {
+                    foreground = true;
+                    break;
+                }
+            }
+        }
+
+
+        if (foreground)
+        {
+            foregroundVotes++;
+        }
+    }
+
+
+    // -------------------------------------------------
+    // Point wasn't visible in any camera
+    // -------------------------------------------------
+
+    if (projectedCameras == 0)
+    {
+        _FilterVisibility[id] = 0;
+        return;
+    }
+
+
+    // -------------------------------------------------
+    // Camera agreement
+    //
+    // If only one camera can see the point:
+    //     require 1 vote.
+    //
+    // If two or more cameras can see it:
+    //     require at least 2 cameras to agree.
+    // -------------------------------------------------
+
+    uint requiredVotes = _FilterRequiredVotes;
+
+    // -------------------------------------------------
+    // Final decision
+    // -------------------------------------------------
+
+    if (foregroundVotes >= requiredVotes)
+    {
+        _FilterVisibility[id] = 1;
+    }
+    else
+    {
+        _FilterVisibility[id] = 0;
+    }
 }

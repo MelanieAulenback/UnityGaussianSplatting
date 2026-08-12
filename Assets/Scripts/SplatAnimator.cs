@@ -88,6 +88,11 @@ public class SplatAnimator : MonoBehaviour
 
     public ComputeShader splatCompute;
 
+    private GraphicsBuffer filterPositionBuffer;
+    private GraphicsBuffer filterVisibilityBuffer;
+
+    private GraphicsBuffer colourDiagnosticBuffer;
+
     private void Start()
     {
         //scale gaussian size depending on scene size
@@ -159,6 +164,7 @@ public class SplatAnimator : MonoBehaviour
 
         //generate splat
         Matrix4x4[] cameraViewProjectionMatrices = new Matrix4x4[renderCameras.Length];
+        Matrix4x4[] cameraWorldToCameraMatrices = new Matrix4x4[renderCameras.Length];
 
         for (int i = 0; i < renderCameras.Length; i++)
         {
@@ -170,6 +176,10 @@ public class SplatAnimator : MonoBehaviour
                     true
                 )
                 *
+                cam.worldToCameraMatrix;
+
+            // World -> camera transform
+            cameraWorldToCameraMatrices[i] =
                 cam.worldToCameraMatrix;
         }
 
@@ -187,12 +197,15 @@ public class SplatAnimator : MonoBehaviour
                     reconstructionMatrix.MultiplyPoint3x4(
                         pointCloud[i]);
         }
-
+        
         //filter positions by those actually in the mask
-        Vector3[] filteredPointCloud = FilterPositionsByAllCameraMasks(
+        Vector3[] filteredPointCloud =
+        FilterPositionsByAllCameraMasksGPU(
             alignedPoints,
             colorFrames,
-            cameraViewProjectionMatrices
+            depthMaps,
+            cameraViewProjectionMatrices,
+            cameraWorldToCameraMatrices
         );
         
         NextSplat.GaussiansFromCloud(filteredPointCloud, gaussianSize);
@@ -249,6 +262,7 @@ public class SplatAnimator : MonoBehaviour
 
         //world to camera matrix
         Matrix4x4[] cameraViewProjectionMatrices = new Matrix4x4[renderCameras.Length];
+        Matrix4x4[] cameraWorldToCameraMatrices = new Matrix4x4[renderCameras.Length];
 
         for (int i = 0; i < renderCameras.Length; i++)
         {
@@ -260,6 +274,10 @@ public class SplatAnimator : MonoBehaviour
                     true
                 )
                 *
+                cam.worldToCameraMatrix;
+
+            // World -> camera transform
+            cameraWorldToCameraMatrices[i] =
                 cam.worldToCameraMatrix;
         }
 
@@ -277,15 +295,17 @@ public class SplatAnimator : MonoBehaviour
                     reconstructionMatrix.MultiplyPoint3x4(
                         pointCloud[i]);
         }
-
+        
         //filter positions by those actually in the mask
-        Vector3[] filteredPointCloud = FilterPositionsByAllCameraMasks(
+        Vector3[] filteredPointCloud =
+        FilterPositionsByAllCameraMasksGPU(
             alignedPoints,
             colorFrames,
-            cameraViewProjectionMatrices
+            depthMaps,
+            cameraViewProjectionMatrices,
+            cameraWorldToCameraMatrices
         );
-
-        //generate the splat
+        
         NextSplat.GaussiansFromCloud(filteredPointCloud, gaussianSize);
 
         //if there are colour frames, create a depth map per camera
@@ -942,162 +962,419 @@ public class SplatAnimator : MonoBehaviour
         }
     }
 
-    private Vector3[] FilterPositionsByAllCameraMasks(
+    private Vector3[] FilterPositionsByAllCameraMasksGPU(
     Vector3[] positions,
     Texture2D[] colorFrames,
-    Matrix4x4[] viewProjectionMatrices
-)
+    RenderTexture[] depthMaps,
+    Matrix4x4[] viewProjectionMatrices,
+    Matrix4x4[] worldToCameraMatrices)
     {
-        List<Vector3> filteredPositions = new List<Vector3>();
+        int count = positions.Length;
+
+        // -------------------------------------------------
+        // Validate input
+        // -------------------------------------------------
+
+        if (count == 0)
+            return Array.Empty<Vector3>();
 
         int cameraCount = Mathf.Min(
             colorFrames.Length,
-            viewProjectionMatrices.Length
+            depthMaps.Length,
+            viewProjectionMatrices.Length,
+            worldToCameraMatrices.Length
         );
 
-
-        // Cache pixel data so we don't repeatedly call GetPixels32()
-        Color32[][] cameraPixels = new Color32[cameraCount][];
-
-        for (int i = 0; i < cameraCount; i++)
+        if (cameraCount == 0)
         {
-            cameraPixels[i] = colorFrames[i].GetPixels32();
+            UnityEngine.Debug.LogError(
+                "GPU mask filtering: No cameras available."
+            );
+
+            return Array.Empty<Vector3>();
         }
 
+        // -------------------------------------------------
+        // Create/recreate point + visibility buffers
+        // -------------------------------------------------
 
-        int kept = 0;
-
-
-        foreach (Vector3 position in positions)
+        if (filterPositionBuffer == null ||
+            filterPositionBuffer.count != count)
         {
-            int foregroundVotes = 0;
+            filterPositionBuffer?.Release();
+            filterVisibilityBuffer?.Release();
 
-            for (int cam = 0; cam < cameraCount; cam++)
-            {
-                Texture2D texture = colorFrames[cam];
+            filterPositionBuffer = new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                count,
+                sizeof(float) * 3
+            );
 
-                Matrix4x4 vp = viewProjectionMatrices[cam];
-
-
-                Vector4 clip =
-                    vp *
-                    new Vector4(
-                        position.x,
-                        position.y,
-                        position.z,
-                        1
-                    );
-
-
-                // Behind camera
-                if (clip.w <= 0)
-                    continue;
-
-
-                Vector3 ndc = clip / clip.w;
-
-
-                float u =
-                    1.0f -
-                    (ndc.x * 0.5f + 0.5f);
-
-                float v =
-                    1.0f -
-                    (ndc.y * 0.5f + 0.5f);
-
-
-                // Outside image
-                if (u < 0 || u > 1 ||
-                    v < 0 || v > 1)
-                {
-                    continue;
-                }
-
-
-                int x = Mathf.Clamp(
-                    (int)(u * texture.width),
-                    0,
-                    texture.width - 1
-                );
-
-
-                int y = Mathf.Clamp(
-                    (int)(v * texture.height),
-                    0,
-                    texture.height - 1
-                );
-
-
-                // ----------------------------------------------------
-                // Allow a small amount of projection error.
-                // Look for foreground anywhere in a small
-                // neighbourhood around the projected point.
-                // ----------------------------------------------------
-
-                const int maskRadius = 7;
-
-                bool foreground = false;
-
-                for (int dy = -maskRadius; dy <= maskRadius && !foreground; dy++)
-                {
-                    for (int dx = -maskRadius; dx <= maskRadius; dx++)
-                    {
-                        int sampleX = Mathf.Clamp(
-                            x + dx,
-                            0,
-                            texture.width - 1
-                        );
-
-                        int sampleY = Mathf.Clamp(
-                            y + dy,
-                            0,
-                            texture.height - 1
-                        );
-
-                        Color32 sample =
-                            cameraPixels[cam][
-                                sampleY * texture.width + sampleX
-                            ];
-
-                        if (sample.a > 0)
-                        {
-                            foreground = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (foreground)
-                {
-                    foregroundVotes++;
-                }
-            }
-
-            if (currentFrame == 0)
-            {
-                if (foregroundVotes >= 2)
-                {
-                    filteredPositions.Add(position);
-                    kept++;
-                }
-            }
-            else 
-            { 
-                if (foregroundVotes >= 2)
-                {
-                    filteredPositions.Add(position);
-                    kept++;
-                }
-            }
+            filterVisibilityBuffer = new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                count,
+                sizeof(uint)
+            );
         }
 
-        /*
-        UnityEngine.Debug.Log(
-            $"Position filtering: {positions.Length:N0} -> {kept:N0}"
+        // Upload point positions
+        filterPositionBuffer.SetData(positions);
+
+        // -------------------------------------------------
+        // Create camera ViewProj buffer
+        // -------------------------------------------------
+
+        GraphicsBuffer filterViewProjBuffer =
+            new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                cameraCount,
+                sizeof(float) * 16
+            );
+
+        filterViewProjBuffer.SetData(
+            viewProjectionMatrices,
+            0,
+            0,
+            cameraCount
         );
-        */
 
-        return filteredPositions.ToArray();
+        // -------------------------------------------------
+        // Create camera WorldToCamera buffer
+        // -------------------------------------------------
+
+        GraphicsBuffer filterWorldToCameraBuffer =
+            new GraphicsBuffer(
+                GraphicsBuffer.Target.Structured,
+                cameraCount,
+                sizeof(float) * 16
+            );
+
+        filterWorldToCameraBuffer.SetData(
+            worldToCameraMatrices,
+            0,
+            0,
+            cameraCount
+        );
+
+        // -------------------------------------------------
+        // Create Texture2DArray for camera masks
+        // -------------------------------------------------
+
+        int maskWidth = colorFrames[0].width;
+        int maskHeight = colorFrames[0].height;
+
+        Texture2DArray maskArray = new Texture2DArray(
+            maskWidth,
+            maskHeight,
+            cameraCount,
+            TextureFormat.RGBA32,
+            false,
+            false
+        );
+
+        maskArray.wrapMode = TextureWrapMode.Clamp;
+        maskArray.filterMode = FilterMode.Point;
+
+        // -------------------------------------------------
+        // Copy each camera mask into texture array
+        // -------------------------------------------------
+
+        for (int cam = 0; cam < cameraCount; cam++)
+        {
+            if (colorFrames[cam] == null)
+            {
+                UnityEngine.Debug.LogError(
+                    $"GPU mask filtering: colorFrames[{cam}] is null."
+                );
+
+                filterViewProjBuffer.Release();
+                filterWorldToCameraBuffer.Release();
+                Destroy(maskArray);
+
+                return Array.Empty<Vector3>();
+            }
+
+            if (colorFrames[cam].width != maskWidth ||
+                colorFrames[cam].height != maskHeight)
+            {
+                UnityEngine.Debug.LogError(
+                    $"GPU mask filtering: Camera {cam} texture size " +
+                    $"{colorFrames[cam].width}x{colorFrames[cam].height} " +
+                    $"does not match camera 0 size " +
+                    $"{maskWidth}x{maskHeight}."
+                );
+
+                filterViewProjBuffer.Release();
+                filterWorldToCameraBuffer.Release();
+                Destroy(maskArray);
+
+                return Array.Empty<Vector3>();
+            }
+
+            Graphics.CopyTexture(
+                colorFrames[cam],
+                0,
+                0,
+                maskArray,
+                cam,
+                0
+            );
+        }
+
+        // -------------------------------------------------
+        // Create Texture2DArray for depth
+        // -------------------------------------------------
+
+        int depthWidth = depthMaps[0].width;
+        int depthHeight = depthMaps[0].height;
+
+        Texture2DArray depthArray = new Texture2DArray(
+            depthWidth,
+            depthHeight,
+            cameraCount,
+            TextureFormat.RFloat,
+            false,
+            true
+        );
+
+        depthArray.wrapMode = TextureWrapMode.Clamp;
+        depthArray.filterMode = FilterMode.Point;
+
+        // -------------------------------------------------
+        // Copy each camera depth map into texture array
+        // -------------------------------------------------
+
+        for (int cam = 0; cam < cameraCount; cam++)
+        {
+            if (depthMaps[cam] == null)
+            {
+                UnityEngine.Debug.LogError(
+                    $"GPU mask filtering: depthMaps[{cam}] is null."
+                );
+
+                filterViewProjBuffer.Release();
+                filterWorldToCameraBuffer.Release();
+
+                Destroy(maskArray);
+                Destroy(depthArray);
+
+                return Array.Empty<Vector3>();
+            }
+
+            if (depthMaps[cam].width != depthWidth ||
+                depthMaps[cam].height != depthHeight)
+            {
+                UnityEngine.Debug.LogError(
+                    $"GPU mask filtering: Depth texture {cam} size " +
+                    $"{depthMaps[cam].width}x{depthMaps[cam].height} " +
+                    $"does not match camera 0 depth size " +
+                    $"{depthWidth}x{depthHeight}."
+                );
+
+                filterViewProjBuffer.Release();
+                filterWorldToCameraBuffer.Release();
+
+                Destroy(maskArray);
+                Destroy(depthArray);
+
+                return Array.Empty<Vector3>();
+            }
+
+            Graphics.CopyTexture(
+                depthMaps[cam],
+                0,
+                0,
+                depthArray,
+                cam,
+                0
+            );
+        }
+
+        // -------------------------------------------------
+        // Find kernel
+        // -------------------------------------------------
+
+        int kernel =
+            splatCompute.FindKernel(
+                "FilterPositionsByMasks"
+            );
+
+        // -------------------------------------------------
+        // Set point buffers
+        // -------------------------------------------------
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_FilterPositions",
+            filterPositionBuffer
+        );
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_FilterVisibility",
+            filterVisibilityBuffer
+        );
+
+        // -------------------------------------------------
+        // Set camera matrices
+        // -------------------------------------------------
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_FilterViewProjs",
+            filterViewProjBuffer
+        );
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_FilterWorldToCameras",
+            filterWorldToCameraBuffer
+        );
+
+        // -------------------------------------------------
+        // Set mask texture array
+        // -------------------------------------------------
+
+        splatCompute.SetTexture(
+            kernel,
+            "_FilterMaskTex",
+            maskArray
+        );
+
+        // -------------------------------------------------
+        // Set depth texture array
+        // -------------------------------------------------
+
+        splatCompute.SetTexture(
+            kernel,
+            "_FilterDepthTex",
+            depthArray
+        );
+
+        // -------------------------------------------------
+        // Parameters
+        // -------------------------------------------------
+
+        splatCompute.SetInt(
+            "_FilterPointCount",
+            count
+        );
+
+        splatCompute.SetInt(
+            "_FilterCameraCount",
+            cameraCount
+        );
+
+        // Mask dimensions
+        splatCompute.SetInt(
+            "_FilterMaskWidth",
+            maskWidth
+        );
+
+        splatCompute.SetInt(
+            "_FilterMaskHeight",
+            maskHeight
+        );
+
+        // Depth dimensions
+        splatCompute.SetInt(
+            "_FilterDepthWidth",
+            depthWidth
+        );
+
+        splatCompute.SetInt(
+            "_FilterDepthHeight",
+            depthHeight
+        );
+
+        // -------------------------------------------------
+        // Mask search radius
+        // -------------------------------------------------
+
+        splatCompute.SetInt(
+            "_FilterMaskRadius",
+            0
+        );
+
+        // -------------------------------------------------
+        // Required votes
+        // -------------------------------------------------
+
+        // Start permissive while testing.
+        //
+        // A point only needs ONE camera to say:
+        //
+        //     mask = foreground
+        //     AND
+        //     depth = compatible
+        //
+        // before it survives.
+        //
+        // This is intentionally permissive so we don't
+        // recreate the holes in the person.
+
+        splatCompute.SetInt(
+            "_FilterRequiredVotes",
+            2
+        );
+
+        // -------------------------------------------------
+        // Dispatch
+        // -------------------------------------------------
+
+        int groups =
+            Mathf.CeilToInt(count / 256.0f);
+
+        splatCompute.Dispatch(
+            kernel,
+            groups,
+            1,
+            1
+        );
+
+        // -------------------------------------------------
+        // Read visibility back
+        // -------------------------------------------------
+
+        uint[] visibility =
+            new uint[count];
+
+        filterVisibilityBuffer.GetData(
+            visibility
+        );
+
+        // -------------------------------------------------
+        // Compact points
+        // -------------------------------------------------
+
+        List<Vector3> filtered =
+            new List<Vector3>();
+
+        filtered.Capacity = count;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (visibility[i] != 0)
+            {
+                filtered.Add(positions[i]);
+            }
+        }
+
+        // -------------------------------------------------
+        // Cleanup
+        // -------------------------------------------------
+
+        filterViewProjBuffer.Release();
+        filterWorldToCameraBuffer.Release();
+
+        Destroy(maskArray);
+        Destroy(depthArray);
+
+        // -------------------------------------------------
+        // Return filtered points
+        // -------------------------------------------------
+
+        return filtered.ToArray();
     }
 
     // =====================================================
@@ -1245,6 +1522,24 @@ public class SplatAnimator : MonoBehaviour
             //the compute shader processes 256 gaussians per group
             int groups = Mathf.CeilToInt(count / 256f);
 
+            if (colourDiagnosticBuffer == null)
+            {
+                colourDiagnosticBuffer = new GraphicsBuffer(
+                    GraphicsBuffer.Target.Structured,
+                    7,
+                    sizeof(uint)
+                );
+            }
+
+            uint[] diagnosticClear = new uint[7];
+
+            colourDiagnosticBuffer.SetData(diagnosticClear);
+
+            splatCompute.SetBuffer(
+                kernel,
+                "_ColourDiagnostic",
+                colourDiagnosticBuffer
+            );
             //execute the ColourGaussians kernel
             splatCompute.Dispatch(
                 kernel,
@@ -1253,7 +1548,21 @@ public class SplatAnimator : MonoBehaviour
                 1
             );
 
+            uint[] diagnostics = new uint[7];
 
+            colourDiagnosticBuffer.GetData(diagnostics);
+
+            UnityEngine.Debug.Log(
+                "===== ColourGaussians Diagnostics =====\n" +
+                $"Total positions:          {diagnostics[0]:N0}\n" +
+                $"Passed camera/depth:      {diagnostics[1]:N0}\n" +
+                $"Passed projection:        {diagnostics[2]:N0}\n" +
+                $"Passed colour mask:       {diagnostics[3]:N0}\n" +
+                $"Passed depth map:         {diagnostics[4]:N0}\n" +
+                $"Passed depth consistency: {diagnostics[5]:N0}\n" +
+                $"Reached final scoring:    {diagnostics[6]:N0}\n" +
+                "======================================="
+            );
         }
 
         //--------------------------------------------------------
