@@ -1300,65 +1300,158 @@ public class SplatAnimator : MonoBehaviour
         // Required votes
         // -------------------------------------------------
 
-        // Start permissive while testing.
+        // -------------------------------------------------
+        // Automatically try camera vote thresholds
         //
-        // A point only needs ONE camera to say:
+        // Start at half the cameras.
         //
-        //     mask = foreground
-        //     AND
-        //     depth = compatible
+        // If nothing survives, reduce the required number
+        // of votes by one and try again.
         //
-        // before it survives.
+        // Example with 4 cameras:
         //
-        // This is intentionally permissive so we don't
-        // recreate the holes in the person.
-
-        splatCompute.SetInt(
-            "_FilterRequiredVotes",
-            2
-        );
-
-        // -------------------------------------------------
-        // Dispatch
+        //     4 / 2 = 2 votes
+        //     2 votes -> no positions
+        //
+        //     2 - 1 = 1 vote
+        //     1 vote -> positions found
+        //
+        // The process continues until positions are found
+        // or the threshold reaches 1.
         // -------------------------------------------------
 
-        int groups =
-            Mathf.CeilToInt(count / 256.0f);
-
-        splatCompute.Dispatch(
-            kernel,
-            groups,
-            1,
-            1
-        );
-
-        // -------------------------------------------------
-        // Read visibility back
-        // -------------------------------------------------
-
-        uint[] visibility =
-            new uint[count];
-
-        filterVisibilityBuffer.GetData(
-            visibility
-        );
-
-        // -------------------------------------------------
-        // Compact points
-        // -------------------------------------------------
+        int requiredVotes =
+            Mathf.Max(1, cameraCount / 2);
 
         List<Vector3> filtered =
             new List<Vector3>();
 
-        filtered.Capacity = count;
 
-        for (int i = 0; i < count; i++)
+        while (requiredVotes >= 1)
         {
-            if (visibility[i] != 0)
+            UnityEngine.Debug.Log(
+                $"GPU mask filtering: " +
+                $"trying {requiredVotes} required vote(s)..."
+            );
+
+
+            // -------------------------------------------------
+            // Set required vote threshold
+            // -------------------------------------------------
+
+            splatCompute.SetInt(
+                "_FilterRequiredVotes",
+                requiredVotes
+            );
+
+
+            // -------------------------------------------------
+            // Clear visibility buffer
+            //
+            // Important because we are dispatching the same
+            // buffer multiple times.
+            // -------------------------------------------------
+
+            uint[] clearVisibility =
+                new uint[count];
+
+            filterVisibilityBuffer.SetData(
+                clearVisibility
+            );
+
+
+            // -------------------------------------------------
+            // Dispatch
+            // -------------------------------------------------
+
+            int groups =
+                Mathf.CeilToInt(
+                    count / 256.0f
+                );
+
+            splatCompute.Dispatch(
+                kernel,
+                groups,
+                1,
+                1
+            );
+
+
+            // -------------------------------------------------
+            // Read visibility back
+            // -------------------------------------------------
+
+            uint[] visibility =
+                new uint[count];
+
+            filterVisibilityBuffer.GetData(
+                visibility
+            );
+
+
+            // -------------------------------------------------
+            // Count / collect surviving positions
+            // -------------------------------------------------
+
+            filtered.Clear();
+
+            for (int i = 0; i < count; i++)
             {
-                filtered.Add(positions[i]);
+                if (visibility[i] != 0)
+                {
+                    filtered.Add(
+                        positions[i]
+                    );
+                }
+            }
+
+
+            // -------------------------------------------------
+            // Check result
+            // -------------------------------------------------
+
+            UnityEngine.Debug.Log(
+                $"GPU mask filtering: " +
+                $"{filtered.Count} positions survived " +
+                $"with {requiredVotes} vote(s)."
+            );
+
+
+            // -------------------------------------------------
+            // SUCCESS
+            //
+            // Stop immediately once we have positions.
+            // -------------------------------------------------
+
+            if (filtered.Count > 0)
+            {
+                UnityEngine.Debug.Log(
+                    $"GPU mask filtering SUCCESS: " +
+                    $"using {requiredVotes} required vote(s)."
+                );
+
+                break;
+            }
+
+
+            // -------------------------------------------------
+            // Nothing survived.
+            //
+            // Reduce required votes and try again.
+            // -------------------------------------------------
+
+            requiredVotes--;
+
+            if (requiredVotes >= 1)
+            {
+                    UnityEngine.Debug.Log(
+                    $"No positions survived. " +
+                    $"Reducing required votes to " +
+                    $"{requiredVotes} and retrying..."
+                );
             }
         }
+
 
         // -------------------------------------------------
         // Cleanup
@@ -1370,9 +1463,27 @@ public class SplatAnimator : MonoBehaviour
         Destroy(maskArray);
         Destroy(depthArray);
 
+
         // -------------------------------------------------
-        // Return filtered points
+        // Final result
         // -------------------------------------------------
+
+        if (filtered.Count == 0)
+        {
+            UnityEngine.Debug.LogError(
+                "GPU mask filtering FAILED: " +
+                "No positions survived even with 1 required vote."
+            );
+
+            return Array.Empty<Vector3>();
+        }
+
+
+        UnityEngine.Debug.Log(
+            $"GPU mask filtering complete. " +
+            $"Returning {filtered.Count} positions."
+        );
+
 
         return filtered.ToArray();
     }
