@@ -572,7 +572,7 @@ void WriteDepth(uint id : SV_DispatchThreadID)
     // Write depth footprint
     // ------------------------------------------
 
-    const int radius = 7;
+    const int radius = 5;
 
 
     for (

@@ -1320,8 +1320,7 @@ public class SplatAnimator : MonoBehaviour
         // or the threshold reaches 1.
         // -------------------------------------------------
 
-        int requiredVotes =
-            Mathf.Max(1, cameraCount / 2);
+        int requiredVotes = cameraCount / 2;
 
         List<Vector3> filtered =
             new List<Vector3>();
