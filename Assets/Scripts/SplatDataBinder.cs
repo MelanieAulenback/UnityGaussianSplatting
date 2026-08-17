@@ -19,21 +19,36 @@ public class SplatDataBinder : VFXBinderBase {
     [VFXPropertyBinding("UnityEngine.GraphicsBuffer")]
     private ExposedProperty _colorBufferProperty = "ColorBuffer";
 
+    [VFXPropertyBinding("UnityEngine.Texture2D")]
+    private ExposedProperty _combinedDepthProperty = "CombinedDepth";
+
     public override bool IsValid(VisualEffect component) {
         return animator != null &&
                component.HasUInt(_countProperty) &&
                component.HasGraphicsBuffer(_positionBufferProperty) &&
                component.HasGraphicsBuffer(_axisBufferProperty) &&
-               component.HasGraphicsBuffer(_colorBufferProperty);
+               component.HasGraphicsBuffer(_colorBufferProperty) && 
+               component.HasTexture(_combinedDepthProperty);
     }
 
     public override void UpdateBinding(VisualEffect component) {
 
+        if (animator == null)
+            return;
+
         SplatData Data = animator.CurrentSplat;
+
+        if (Data == null)
+            return;
+
+        if (animator.PlayerCombinedDepth == null)
+            return;
+
         component.SetUInt(_countProperty, (uint)Data.Count);
         component.SetGraphicsBuffer(_positionBufferProperty, Data.PositionsBuffer);
         component.SetGraphicsBuffer(_axisBufferProperty, Data.AxesBuffer);
         component.SetGraphicsBuffer(_colorBufferProperty, Data.ColorsBuffer);
+        component.SetTexture(_combinedDepthProperty, animator.PlayerCombinedDepth);
     }
 
     public override string ToString() {

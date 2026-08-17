@@ -4,6 +4,9 @@
 #pragma kernel ConvertDepth
 #pragma kernel ClearDepth
 #pragma kernel FilterPositionsByMasks
+#pragma kernel ClearCombinedDepth
+#pragma kernel ConvertCombinedDepth
+#pragma kernel WriteCombinedDepth
 
 RWStructuredBuffer<uint> _ColourDiagnostic;
 
@@ -60,6 +63,24 @@ uint _FilterRequiredVotes;
 
 uint _FilterDepthWidth;
 uint _FilterDepthHeight;
+
+//combined depth map
+StructuredBuffer<float3> _CombinedPositions;
+
+RWTexture2D<int> CombinedDepthTexture;
+
+float4x4 _CombinedViewProj;
+float4x4 _CombinedWorldToCamera;
+float4x4 _CombinedLocalToWorld;
+
+int _CombinedGaussianCount;
+int _CombinedTextureWidth;
+int _CombinedTextureHeight;
+
+Texture2D<int> CombinedDepthIntTexture;
+
+RWTexture2D<float> CombinedDepthFloatTexture;
+
 /*
 [numthreads(256, 1, 1)]
 void ColourGaussians(uint id : SV_DispatchThreadID)
@@ -717,6 +738,174 @@ void ClearDepth(uint3 id : SV_DispatchThreadID)
         return;
 
     DepthTexture[id.xy] = 2147483647;
+}
+
+[numthreads(64, 1, 1)]
+void WriteCombinedDepth(uint id : SV_DispatchThreadID)
+{
+    if (id >= _CombinedGaussianCount)
+        return;
+
+    float3 localPos =
+        _CombinedPositions[id];
+
+    float3 worldPos =
+        mul(
+            _CombinedLocalToWorld,
+            float4(localPos, 1.0)
+        ).xyz;
+
+    float4 camPos =
+        mul(
+            _CombinedWorldToCamera,
+            float4(worldPos, 1.0)
+        );
+
+    float depth = -camPos.z;
+
+    if (depth <= 0)
+        return;
+
+
+    // ------------------------------------------
+    // Project into player's camera
+    // ------------------------------------------
+
+    float4 clipPos = mul(
+        _CombinedViewProj,
+        float4(worldPos, 1)
+    );
+
+    if (clipPos.w <= 0)
+        return;
+
+
+    float2 ndc =
+        clipPos.xy / clipPos.w;
+
+
+    float2 uv;
+
+    uv.x =
+        1.0 -
+        (ndc.x * 0.5 + 0.5);
+
+    uv.y =
+        1.0 -
+        (ndc.y * 0.5 + 0.5);
+
+
+    if (
+        uv.x < 0 ||
+        uv.x > 1 ||
+        uv.y < 0 ||
+        uv.y > 1
+    )
+    {
+        return;
+    }
+
+
+    // ------------------------------------------
+    // Convert to depth pixel
+    // ------------------------------------------
+
+    uint2 pixel;
+
+    pixel.x =
+        (uint) (uv.x * _CombinedTextureWidth);
+
+    pixel.y =
+        (uint) (uv.y * _CombinedTextureHeight);
+
+
+    if (
+        pixel.x >= _CombinedTextureWidth ||
+        pixel.y >= _CombinedTextureHeight
+    )
+    {
+        return;
+    }
+
+
+    // ------------------------------------------
+    // Depth in millimetres
+    // ------------------------------------------
+
+    int depthInt =
+        (int) (depth * 1000.0);
+
+
+    // ------------------------------------------
+    // Write closest depth
+    // ------------------------------------------
+
+    const int radius = 5;
+
+    for (int y = -radius; y <= radius; y++)
+    {
+        for (int x = -radius; x <= radius; x++)
+        {
+            if (
+            x * x +
+            y * y >
+            radius * radius
+        )
+                continue;
+
+            int2 p =
+            int2(pixel) +
+            int2(x, y);
+
+            if (
+            p.x < 0 ||
+            p.y < 0 ||
+            p.x >= _CombinedTextureWidth ||
+            p.y >= _CombinedTextureHeight
+        )
+                continue;
+
+            InterlockedMin(
+            CombinedDepthTexture[p],
+            depthInt
+        );
+        }
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ClearCombinedDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (
+        id.x >= _CombinedTextureWidth ||
+        id.y >= _CombinedTextureHeight
+    )
+        return;
+
+    CombinedDepthTexture[id.xy] = 2147483647;
+}
+
+[numthreads(8, 8, 1)]
+void ConvertCombinedDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (
+        id.x >= _CombinedTextureWidth ||
+        id.y >= _CombinedTextureHeight
+    )
+        return;
+
+    int depth =
+        CombinedDepthIntTexture[id.xy];
+
+    if (depth == 2147483647)
+    {
+        CombinedDepthFloatTexture[id.xy] = 9999.0;
+    }
+    else
+    {
+        CombinedDepthFloatTexture[id.xy] =
+            depth / 1000.0;
+    }
 }
 
 [numthreads(256, 1, 1)]

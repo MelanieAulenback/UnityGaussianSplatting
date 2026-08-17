@@ -1407,7 +1407,7 @@ MonoBehaviour:
     - rid: 1001
       type: {class: ParticleShadingShaderGraph, ns: UnityEditor.VFX, asm: Unity.VisualEffectGraph.Editor}
       data:
-        shaderGraph: {fileID: 4333940904281232215, guid: ba6fab3c458b65948b6b54b560dc6ad8, type: 3}
+        shaderGraph: {fileID: 4333940904281232215, guid: 7049fcbdba0a56e4086839496b83ee7c, type: 3}
         materialSettings:
           m_PropertyNames:
           - _AddPrecomputedVelocity
@@ -1426,6 +1426,7 @@ MonoBehaviour:
           - _EnableBlendModePreserveSpecularLighting
           - _EnableFogOnTransparent
           - _OpaqueCullMode
+          - _QueueOffset
           - _RenderQueueType
           - _SrcBlend
           - _StencilRef
@@ -1465,6 +1466,7 @@ MonoBehaviour:
           - 0
           - 1
           - 2
+          - -1
           - 4
           - 1
           - 0
@@ -1487,7 +1489,7 @@ MonoBehaviour:
           - 4
           - 4
           - 0
-          renderQueue: 3000
+          renderQueue: 2999
 --- !u!114 &8926484042661615541
 MonoBehaviour:
   m_ObjectHideFlags: 0

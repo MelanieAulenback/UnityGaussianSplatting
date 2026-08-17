@@ -6,6 +6,26 @@ public class DepthDisplaySetup : MonoBehaviour
     public Material colourMaterial;
     public SplatAnimator splatAnimator;
 
+    // Applies the combined environment + person depth map
+    public void SetupCombinedDepthTexture()
+    {
+        if (splatAnimator.PlayerCombinedDepth == null)
+        {
+            Debug.LogError("Combined depth map has not been created yet!");
+            return;
+        }
+
+        depthMaterial.SetTexture(
+            "_DepthTex",
+            splatAnimator.PlayerCombinedDepth
+        );
+
+        depthMaterial.SetFloat(
+            "_MaxDepth",
+            10f
+        );
+    }
+
     //applies depth map and coloured image on the two planes
     //for comparing
     public void SetupDepthTexture()

@@ -50,6 +50,13 @@ public class SplatAnimator : MonoBehaviour
     private RenderTexture[] environmentDepthMaps;
     private RenderTexture[] environmentDepthMinMaps;
 
+    [Header("Player Camera")]
+    public Camera playerCam;
+    RenderTexture playerCameraCombinedDepth;
+    RenderTexture playerCameraCombinedDepthMin;
+    public RenderTexture PlayerCombinedDepth =>
+    playerCameraCombinedDepth;
+
     [Header("Counts")]
     public int numCameras;
 
@@ -121,7 +128,7 @@ public class SplatAnimator : MonoBehaviour
                 NextFrame();
                 if (depthDisplay != null)
                 {
-                    depthDisplay.SetupDepthTexture();
+                    depthDisplay.SetupCombinedDepthTexture();
                 }
             }
         }
@@ -136,6 +143,9 @@ public class SplatAnimator : MonoBehaviour
 
         //initialize the scene
         InitializeScene();
+
+        //create player depth map of both environment and moving splat
+        CreatePlayerCombinedDepth();
 
         //preload first 5 (cache size) frames
         for (int i = 0; i < CACHE_SIZE && i < frameCount; i++)
@@ -243,6 +253,14 @@ public class SplatAnimator : MonoBehaviour
             numCameras,
             false
         );
+
+        // Generate combined environment + person depth
+        GeneratePlayerCombinedDepth(
+            playerCam,
+            envSplat,
+            NextSplat
+        );
+
         //give ability to call next frame
         callNextFrame = true;
     }
@@ -349,7 +367,14 @@ public class SplatAnimator : MonoBehaviour
             numCameras,
             false
         );
-        
+
+        // Generate combined environment + person depth
+        GeneratePlayerCombinedDepth(
+            playerCam,
+            envSplat,
+            NextSplat
+        );
+
         /*
         UnityEngine.Debug.Log(
             $"Frame generation time: {sw.ElapsedMilliseconds} ms " +
@@ -1328,12 +1353,6 @@ public class SplatAnimator : MonoBehaviour
 
         while (requiredVotes >= 1)
         {
-            UnityEngine.Debug.Log(
-                $"GPU mask filtering: " +
-                $"trying {requiredVotes} required vote(s)..."
-            );
-
-
             // -------------------------------------------------
             // Set required vote threshold
             // -------------------------------------------------
@@ -1404,18 +1423,6 @@ public class SplatAnimator : MonoBehaviour
                 }
             }
 
-
-            // -------------------------------------------------
-            // Check result
-            // -------------------------------------------------
-
-            UnityEngine.Debug.Log(
-                $"GPU mask filtering: " +
-                $"{filtered.Count} positions survived " +
-                $"with {requiredVotes} vote(s)."
-            );
-
-
             // -------------------------------------------------
             // SUCCESS
             //
@@ -1424,11 +1431,6 @@ public class SplatAnimator : MonoBehaviour
 
             if (filtered.Count > 0)
             {
-                UnityEngine.Debug.Log(
-                    $"GPU mask filtering SUCCESS: " +
-                    $"using {requiredVotes} required vote(s)."
-                );
-
                 break;
             }
 
@@ -1476,13 +1478,6 @@ public class SplatAnimator : MonoBehaviour
 
             return Array.Empty<Vector3>();
         }
-
-
-        UnityEngine.Debug.Log(
-            $"GPU mask filtering complete. " +
-            $"Returning {filtered.Count} positions."
-        );
-
 
         return filtered.ToArray();
     }
@@ -1661,18 +1656,6 @@ public class SplatAnimator : MonoBehaviour
             uint[] diagnostics = new uint[7];
 
             colourDiagnosticBuffer.GetData(diagnostics);
-
-            UnityEngine.Debug.Log(
-                "===== ColourGaussians Diagnostics =====\n" +
-                $"Total positions:          {diagnostics[0]:N0}\n" +
-                $"Passed camera/depth:      {diagnostics[1]:N0}\n" +
-                $"Passed projection:        {diagnostics[2]:N0}\n" +
-                $"Passed colour mask:       {diagnostics[3]:N0}\n" +
-                $"Passed depth map:         {diagnostics[4]:N0}\n" +
-                $"Passed depth consistency: {diagnostics[5]:N0}\n" +
-                $"Reached final scoring:    {diagnostics[6]:N0}\n" +
-                "======================================="
-            );
         }
 
         //--------------------------------------------------------
@@ -1931,6 +1914,232 @@ public class SplatAnimator : MonoBehaviour
             groupsY,
             1
         );
+    }
+
+    void CreatePlayerCombinedDepth()
+    {
+        int width = Screen.width;
+        int height = Screen.height;
+
+        playerCameraCombinedDepth =
+            new RenderTexture(
+                width,
+                height,
+                0,
+                RenderTextureFormat.RFloat
+            );
+
+        playerCameraCombinedDepth.enableRandomWrite = true;
+        playerCameraCombinedDepth.filterMode = FilterMode.Point;
+        playerCameraCombinedDepth.wrapMode = TextureWrapMode.Clamp;
+        playerCameraCombinedDepth.Create();
+
+
+        playerCameraCombinedDepthMin =
+            new RenderTexture(
+                width,
+                height,
+                0,
+                RenderTextureFormat.RInt
+            );
+
+        playerCameraCombinedDepthMin.enableRandomWrite = true;
+        playerCameraCombinedDepthMin.filterMode = FilterMode.Point;
+        playerCameraCombinedDepthMin.wrapMode = TextureWrapMode.Clamp;
+        playerCameraCombinedDepthMin.Create();
+    }
+
+    void GeneratePlayerCombinedDepth(
+    Camera playerCamera,
+    SplatData environment,
+    SplatData person)
+    {
+        // Clear depth first
+        int clearKernel =
+            splatCompute.FindKernel("ClearCombinedDepth");
+
+        splatCompute.SetTexture(
+            clearKernel,
+            "CombinedDepthTexture",
+            playerCameraCombinedDepthMin
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureWidth",
+            playerCameraCombinedDepthMin.width
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureHeight",
+            playerCameraCombinedDepthMin.height
+        );
+
+        int groupsX =
+            Mathf.CeilToInt(
+                playerCameraCombinedDepthMin.width / 8f
+            );
+
+        int groupsY =
+            Mathf.CeilToInt(
+                playerCameraCombinedDepthMin.height / 8f
+            );
+
+        splatCompute.Dispatch(
+            clearKernel,
+            groupsX,
+            groupsY,
+            1
+        );
+
+
+        // ------------------------------------------
+        // Player camera matrices
+        // ------------------------------------------
+
+        Matrix4x4 view =
+            playerCamera.worldToCameraMatrix;
+
+        Matrix4x4 proj =
+            GL.GetGPUProjectionMatrix(
+                playerCamera.projectionMatrix,
+                true
+            );
+
+        Matrix4x4 viewProj =
+            proj * view;
+
+
+        // ------------------------------------------
+        // Write environment depth
+        // ------------------------------------------
+
+        WriteCombinedSplatDepth(
+            environment,
+            envSplatRoot,
+            view,
+            viewProj
+        );
+
+
+        // ------------------------------------------
+        // Write person depth
+        // ------------------------------------------
+
+        WriteCombinedSplatDepth(
+            person,
+            splatRoot,
+            view,
+            viewProj
+        );
+
+
+        // ------------------------------------------
+        // Convert integer depth → float
+        // ------------------------------------------
+
+        int convertKernel =
+            splatCompute.FindKernel("ConvertCombinedDepth");
+
+        splatCompute.SetTexture(
+            convertKernel,
+            "CombinedDepthIntTexture",
+            playerCameraCombinedDepthMin
+        );
+
+        splatCompute.SetTexture(
+            convertKernel,
+            "CombinedDepthFloatTexture",
+            playerCameraCombinedDepth
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureWidth",
+            playerCameraCombinedDepth.width
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureHeight",
+            playerCameraCombinedDepth.height
+        );
+
+        splatCompute.Dispatch(
+            convertKernel,
+            Mathf.CeilToInt(
+                playerCameraCombinedDepth.width / 8f
+            ),
+            Mathf.CeilToInt(
+                playerCameraCombinedDepth.height / 8f
+            ),
+            1
+        );
+    }
+
+    void WriteCombinedSplatDepth(
+    SplatData splat,
+    Transform splatTransform,
+    Matrix4x4 view,
+    Matrix4x4 viewProj)
+    {
+        if (splat == null || splat.Count == 0)
+            return;
+
+        int kernel =
+            splatCompute.FindKernel(
+                "WriteCombinedDepth"
+            );
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_CombinedPositions",
+            splat.PositionsBuffer
+        );
+
+        splatCompute.SetTexture(
+            kernel,
+            "CombinedDepthTexture",
+            playerCameraCombinedDepthMin
+        );
+
+        splatCompute.SetMatrix(
+            "_CombinedLocalToWorld",
+            splatTransform.localToWorldMatrix
+        );
+
+        splatCompute.SetMatrix(
+            "_CombinedWorldToCamera",
+            view
+        );
+
+        splatCompute.SetMatrix(
+            "_CombinedViewProj",
+            viewProj
+        );
+
+        splatCompute.SetInt(
+            "_CombinedGaussianCount",
+            splat.Count
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureWidth",
+            playerCameraCombinedDepthMin.width
+        );
+
+        splatCompute.SetInt(
+            "_CombinedTextureHeight",
+            playerCameraCombinedDepthMin.height
+        );
+
+        int groups =
+            Mathf.CeilToInt(splat.Count / 64f);
+
+        splatCompute.Dispatch(
+            kernel,
+            groups,
+            1,
+            1
+        );
+
     }
 
     // =====================================================
