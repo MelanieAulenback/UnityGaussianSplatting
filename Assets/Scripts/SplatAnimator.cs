@@ -1916,6 +1916,7 @@ public class SplatAnimator : MonoBehaviour
         );
     }
 
+    //creates a depth map of the environment and the moving object combined
     void CreatePlayerCombinedDepth()
     {
         int width = Screen.width;
@@ -1949,6 +1950,7 @@ public class SplatAnimator : MonoBehaviour
         playerCameraCombinedDepthMin.Create();
     }
 
+    //calls the generation/writing of the combined depth map
     void GeneratePlayerCombinedDepth(
     Camera playerCamera,
     SplatData environment,
@@ -2074,6 +2076,7 @@ public class SplatAnimator : MonoBehaviour
         );
     }
 
+    //writes the depth of individual splats
     void WriteCombinedSplatDepth(
     SplatData splat,
     Transform splatTransform,
@@ -2092,6 +2095,12 @@ public class SplatAnimator : MonoBehaviour
             kernel,
             "_CombinedPositions",
             splat.PositionsBuffer
+        );
+
+        splatCompute.SetBuffer(
+            kernel,
+            "_CombinedColors",
+            splat.ColorsBuffer
         );
 
         splatCompute.SetTexture(

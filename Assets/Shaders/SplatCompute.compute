@@ -66,6 +66,7 @@ uint _FilterDepthHeight;
 
 //combined depth map
 StructuredBuffer<float3> _CombinedPositions;
+StructuredBuffer<float4> _CombinedColors;
 
 RWTexture2D<int> CombinedDepthTexture;
 
@@ -745,6 +746,16 @@ void WriteCombinedDepth(uint id : SV_DispatchThreadID)
 {
     if (id >= _CombinedGaussianCount)
         return;
+
+    // ------------------------------------------
+    // Ignore transparent Gaussians
+    // ------------------------------------------
+
+    float4 color = _CombinedColors[id];
+
+    if (color.a <= 0.0)
+        return;
+
 
     float3 localPos =
         _CombinedPositions[id];
